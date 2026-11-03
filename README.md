@@ -2,7 +2,7 @@
 
 Tetri is a small multi-currency digital bank built with Flutter and ASP.NET Core. **Sandbox only: no real money.**
 
-Phases 1–3 are verified: the ledger, authentication, account history, official exchange rates and quoted conversions. The Flutter design system is in progress; app screens arrive in Phase 5.
+Phases 1–4 are verified: the ledger, authentication, account history, official exchange rates, quoted conversions and Flutter design system. App screens are next in Phase 5.
 
 ## Try it
 
@@ -135,4 +135,5 @@ AGENTS.MD                  Product specification and phase gates
 
 - All required components, theme tokens and typography are implemented. Local analysis reports zero issues.
 - 113 tests cover components, 38 required contrast pairs, extra state/avatar contrast, minor-unit formatting, keypad boundaries, reduced motion and a small-phone gallery in both themes.
-- Android visual verification and the new Flutter CI job are in progress. Phase 5 has not started.
+- The debug APK builds and runs on an Android API 36 emulator at 360 dp width. Light and dark gallery screens and transfer review sheets were visually checked; captures are in `docs/screenshots/`.
+- Both jobs passed in [Phase 4 CI](https://github.com/Ggaming5005/Tetri/actions/runs/41677108152): all 113 Flutter tests, analysis with zero issues, and three consecutive runs of all 185 backend tests plus the Compose smoke check.
