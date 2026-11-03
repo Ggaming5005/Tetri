@@ -1,0 +1,32 @@
+# Secrets and local tooling
+.env
+.env.*
+!.env.example
+.tools/
+.artifacts/
+TestResults/
+**/TestResults/
+
+# .NET
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+
+# Flutter
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+**/build/
+**/android/local.properties
+**/android/key.properties
+*.jks
+*.keystore
+
+# Existing editor scaffold marker; mobile is introduced in Phase 4.
+flutter_application_1/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
