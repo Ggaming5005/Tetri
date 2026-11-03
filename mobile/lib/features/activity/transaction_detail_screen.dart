@@ -16,7 +16,7 @@ class TransactionDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(transactionProvider(transactionId));
     return TetriScaffold(
-      bottomNavigationBar: const TetriNavigation(selectedIndex: 1),
+      bottomNavigationBar: const TetriNavigation(selectedIndex: 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

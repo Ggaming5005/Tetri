@@ -11,36 +11,103 @@ class TetriScaffold extends StatelessWidget {
     required this.child,
     this.title,
     this.bottomNavigationBar,
+    this.bottomAction,
     this.scrollController,
+    this.fillViewport = false,
   });
 
   final Widget child;
   final String? title;
   final Widget? bottomNavigationBar;
+  final Widget? bottomAction;
   final ScrollController? scrollController;
+  final bool fillViewport;
 
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: TetriColors.of(context).bg,
     bottomNavigationBar: bottomNavigationBar,
+    resizeToAvoidBottomInset: true,
     body: SafeArea(
-      child: CustomScrollView(
-        controller: scrollController,
-        slivers: [
-          if (title != null)
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _TitleHeader(
-                title!,
-                TetriColors.of(context),
-                MediaQuery.textScalerOf(context),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final inlineAction =
+              bottomAction != null &&
+              constraints.maxHeight < TetriSizes.compactViewportHeight;
+          final scroll = CustomScrollView(
+            controller: scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            slivers: [
+              if (title != null)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _TitleHeader(
+                    title!,
+                    TetriColors.of(context),
+                    MediaQuery.textScalerOf(context),
+                  ),
+                ),
+              SliverPadding(
+                padding: const EdgeInsets.all(TetriSpace.x24),
+                sliver: SliverToBoxAdapter(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: TetriSizes.contentMaxWidth,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          child,
+                          if (inlineAction) ...[
+                            const SizedBox(height: TetriSpace.x24),
+                            bottomAction!,
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          SliverPadding(
-            padding: const EdgeInsets.all(TetriSpace.x24),
-            sliver: SliverToBoxAdapter(child: child),
-          ),
-        ],
+            ],
+          );
+          return Column(
+            children: [
+              Expanded(
+                child: fillViewport
+                    ? Padding(
+                        padding: const EdgeInsets.all(TetriSpace.x24),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: TetriSizes.contentMaxWidth,
+                            ),
+                            child: SizedBox.expand(child: child),
+                          ),
+                        ),
+                      )
+                    : scroll,
+              ),
+              if (bottomAction != null && !inlineAction)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    TetriSpace.x24,
+                    TetriSpace.x8,
+                    TetriSpace.x24,
+                    TetriSpace.x16,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: TetriSizes.contentMaxWidth,
+                    ),
+                    child: bottomAction!,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     ),
   );
@@ -83,18 +150,26 @@ class _TitleHeader extends SliverPersistentHeaderDelegate {
           vertical: TetriSpace.x16,
         ),
         child: Align(
-          alignment: Alignment.bottomLeft,
-          child: Semantics(
-            header: true,
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle.lerp(
-                TetriTypography.headline,
-                TetriTypography.title,
-                collapse,
-              )!.copyWith(color: colors.textPrimary),
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: TetriSizes.contentMaxWidth,
+            ),
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle.lerp(
+                    TetriTypography.headline,
+                    TetriTypography.title,
+                    collapse,
+                  )!.copyWith(color: colors.textPrimary),
+                ),
+              ),
             ),
           ),
         ),

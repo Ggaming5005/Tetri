@@ -366,18 +366,18 @@ The decimal part of large amounts (the ".56" in "1,234.56") is shown in the same
 - Durations: 150 ms (small state changes), 250 ms (screen-level transitions). Curve: `Curves.easeOutCubic`. No bounce, no spring overshoot.
 - Balance changes animate with a short count-up (300 ms).
 - Respect the system "reduce motion" setting: when it is on, no animations except fades.
-- Haptics: light impact on keypad presses, success notification haptic when a transfer completes.
+- Haptics: native keyboard feedback follows the phone's settings; success notification haptic when a transfer completes.
 
 ### 9.6 Components
 
 Build these in `design/components/`, each with a widget test. Screens are assembled only from design-system components. The list below is the minimum: if a screen needs something new, add it as a reusable component in `design/components/` (with tokens and a widget test), never as one-off styling inside a screen.
 
 - **TetriScaffold**: safe area, side padding 24, optional large title that collapses on scroll.
-- **AmountText**: formats money from minor units. Currency symbol, thousand separators, two decimals, tabular figures, dimmed decimal part, optional sign and color rules from 9.2. This is the only way an amount is ever shown.
+- **AmountText**: formats non-editable money from minor units. Currency symbol, thousand separators, two decimals, tabular figures, dimmed decimal part, optional sign and color rules from 9.2. Editable amounts use AmountInput below.
 - **PrimaryButton / SecondaryButton / TextButton**: loading state (spinner replaces label, width stays fixed), disabled state.
 - **AccountCard**: currency flag circle, currency name, balance. Used in a horizontal pager on home.
 - **TransactionRow**: avatar or icon (left), title and subtitle (middle), AmountText (right). Grouped under date headers ("Today", "Yesterday", "12 Oct").
-- **AmountKeypad**: custom number pad (1 to 9, decimal point, 0, backspace). Large keys, no borders. Prevents more than 2 decimals and leading zeros.
+- **AmountInput**: native decimal keyboard, clear editable amount and currency, integer-only parsing, no more than 2 decimals, no negative values or overflow. The user's latest design preference replaces the custom keypad in Send and Convert. Layouts must resize and scroll around the phone keyboard; primary actions stay reachable on small screens and with enlarged text.
 - **ReviewSheet**: bottom sheet with a summary table (to, amount, fee, rate, total) and a confirm button.
 - **StatusView**: full-screen success or failure state with a single icon, a headline, the amount and one action.
 - **EmptyState**: icon, one line, optional action.
@@ -408,14 +408,14 @@ Every screen must handle four states: loading (skeleton), empty, error (with ret
 2. **Sign up**: one field per step (email, name, handle, password), with a progress indicator. Handle availability is checked as you type against `GET /auth/handle-available` (debounced 400 ms). If registration still returns `handle_taken`, go back to the handle step with that message.
 3. **Sign in**: email and password. After the first sign in, offer to enable biometric unlock.
 4. **Lock screen**: on app open with biometrics enabled, unlock with Face ID or fingerprint. The refresh token lives in secure storage and is only read after biometric success.
-5. **Home**: greeting with first name, total balance in GEL equivalent (displayAmount), an account card pager (GEL, USD, EUR), two quick actions (Send, Convert) as round icon buttons with labels, and recent activity (last 5 rows) with "See all".
+5. **Home**: greeting with first name and a top-right profile button opening Settings, total balance in GEL equivalent (displayAmount), an account card pager (GEL, USD, EUR), two quick actions (Send, Convert) as round icon buttons with labels, and recent activity (last 5 rows) with "See all". Bottom navigation is Home, Payments, Activity. Payments is a simple hub for Send money and Convert currencies. Settings is a secondary page with back navigation, not a bottom tab (user design refinement, 3 November 2026).
 6. **Account detail**: balance (titleAmount), account actions, and full history for that account with infinite scroll.
 7. **Send money**, a four-step flow:
    1. Recipient: search by handle, recent recipients at the top.
-   2. Amount: big amount display, AmountKeypad, account picker (which currency), available balance shown below in label style. The Continue button is disabled when the amount is zero or above the balance.
+   2. Amount: large native AmountInput, account picker (which currency), available balance shown below in label style. The Continue button is disabled when the amount is zero or above the balance.
    3. Review: ReviewSheet. The idempotency key is generated here, when the review opens, and reused on every retry of this same confirmation.
    4. Result: StatusView. On network timeout, retry automatically with the same key, then show the real result.
-8. **Convert**: from and to account pickers, amount keypad, live preview (rate, fee, you get) refreshed when the amount changes (debounced 300 ms). Continue creates a fresh quote and opens the review with exactly the quoted numbers and the NBG rate date. Confirm sends that `quoteId`. On `quote_expired`, fetch a new quote and show the review again with a short note that the rate was refreshed; never execute terms the user did not see.
+8. **Convert**: compact from and to account panels, native AmountInput, live preview (rate, fee, you get) refreshed when the amount changes (debounced 300 ms). Keep the layout simple and responsive without a permanent custom keypad. Continue creates a fresh quote and opens the review with exactly the quoted numbers and the NBG rate date. Confirm sends that `quoteId`. On `quote_expired`, fetch a new quote and show the review again with a short note that the rate was refreshed; never execute terms the user did not see.
 9. **Activity**: all transactions grouped by date, with a filter chip row (All, Sent, Received, Conversions).
 10. **Transaction detail**: big amount, status, counterparty, date and time, reference id (copyable), and for conversions the rate and fee.
 11. **Settings**: profile, biometric toggle, theme (system, light, dark), about (version, link to the GitHub repo), sign out.
@@ -484,7 +484,7 @@ Rate limiting: the shared test host raises every rate limit through configuratio
 ### Mobile tests
 
 - AmountText formatting for all three currencies, negative and positive, large values.
-- AmountKeypad input rules.
+- Native amount input rules, keyboard-inset layout, small/large screens and enlarged text. Retain legacy keypad component coverage while it remains in the debug gallery.
 - Send flow: idempotency key is the same across retries of one confirmation and different for a new transfer.
 - Convert flow: on `quote_expired`, the app fetches a new quote and returns to the review instead of executing.
 - Token refresh: when three requests get 401 at once, the refresh endpoint is called exactly once and all three requests are retried with the new token.

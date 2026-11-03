@@ -2,7 +2,7 @@ import 'package:intl/intl.dart';
 
 abstract final class MoneyStrings {
   static const send = 'Send money';
-  static const convert = 'Convert money';
+  static const convert = 'Convert';
   static const back = 'Back';
   static const done = 'Done';
   static const retry = 'Retry';
@@ -41,6 +41,8 @@ abstract final class MoneyStrings {
   static const from = 'From';
   static const to = 'To';
   static const amount = 'Amount';
+  static const amountPlaceholder = '0.00';
+  static const youSend = 'You send';
   static const fee = 'Fee';
   static const total = 'Total';
   static const rate = 'Exchange rate';

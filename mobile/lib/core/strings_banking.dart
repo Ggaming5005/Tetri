@@ -1,5 +1,11 @@
 abstract final class BankingStrings {
   static const home = 'Home';
+  static const payments = 'Payments';
+  static const sendMoney = 'Send money';
+  static const sendMoneyDescription = 'To another Tetri account.';
+  static const convertCurrencies = 'Convert currencies';
+  static const convertCurrenciesDescription =
+      'Between your GEL, USD and EUR accounts.';
   static const activity = 'Activity';
   static const settings = 'Settings';
   static const back = 'Back';
@@ -8,8 +14,7 @@ abstract final class BankingStrings {
   static const send = 'Send';
   static const convert = 'Convert';
   static const totalBalance = 'Total balance in GEL';
-  static const totalUnavailable =
-      'Your total is unavailable. You can still use each account. Try again to refresh the rates.';
+  static const totalUnavailable = 'Rates unavailable';
   static const rateDate = 'Official rate date';
   static const accounts = 'Accounts';
   static const noAccounts =

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -17,6 +20,7 @@ import '../features/auth/auth_screens.dart';
 import '../features/convert/convert_screen.dart';
 import '../features/home/banking_providers.dart';
 import '../features/home/home_screen.dart';
+import '../features/payments/payments_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/transfer/transfer_screen.dart';
 import 'preferences.dart';
@@ -31,6 +35,7 @@ class _TetriAppState extends ConsumerState<TetriApp>
     with WidgetsBindingObserver {
   late final session = ref.read(sessionProvider);
   String? _previousUserId;
+  SessionStatus? _previousStatus;
 
   late final router = GoRouter(
     initialLocation: kDebugMode && const bool.fromEnvironment('TETRI_GALLERY')
@@ -72,6 +77,7 @@ class _TetriAppState extends ConsumerState<TetriApp>
       _route('/lock', (_) => const LockScreen()),
       _route('/biometrics', (_) => const BiometricsOfferScreen()),
       _route('/home', (_) => const HomeScreen()),
+      _route('/payments', (_) => const PaymentsScreen()),
       _route(
         '/accounts/:id',
         (state) => AccountScreen(accountId: state.pathParameters['id']!),
@@ -134,6 +140,12 @@ class _TetriAppState extends ConsumerState<TetriApp>
   }
 
   void _sessionChanged() {
+    if (session.status == SessionStatus.locked &&
+        _previousStatus != SessionStatus.locked) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+    }
+    _previousStatus = session.status;
     final userId = session.user?.id;
     if (_previousUserId == userId) return;
     _previousUserId = userId;
@@ -146,7 +158,17 @@ class _TetriAppState extends ConsumerState<TetriApp>
   }
 
   @override
-  Future<bool> didPopRoute() async => session.status == SessionStatus.locked;
+  Future<bool> didPopRoute() async {
+    if (session.status == SessionStatus.locked) return true;
+    if (WidgetsBinding.instance.platformDispatcher.views.any(
+      (view) => view.viewInsets.bottom > 0,
+    )) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+      return true;
+    }
+    return false;
+  }
 
   @override
   void dispose() {
@@ -203,7 +225,10 @@ class _TetriAppState extends ConsumerState<TetriApp>
                       children: [
                         Offstage(
                           offstage: locked,
-                          child: TickerMode(enabled: !locked, child: child!),
+                          child: ExcludeFocus(
+                            excluding: locked,
+                            child: TickerMode(enabled: !locked, child: child!),
+                          ),
                         ),
                         if (locked) const LockScreen(),
                       ],

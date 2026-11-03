@@ -7,8 +7,7 @@ import '../../core/providers.dart';
 import '../../core/strings_banking.dart';
 import '../../design/components/amount_text.dart';
 import '../../design/components/browse_components.dart';
-import '../../design/components/buttons.dart';
-import '../../design/components/inline_banner.dart';
+import '../../design/components/content.dart';
 import '../../design/components/skeleton.dart';
 import '../../design/components/tetri_scaffold.dart';
 import '../../design/tokens.dart';
@@ -16,11 +15,18 @@ import '../activity/transaction_presentation.dart';
 import 'banking_providers.dart';
 import 'gel_total.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  String _currency = 'GEL';
+
+  @override
+  Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider);
     final accounts = ref.watch(accountsProvider);
     final rates = ref.watch(ratesProvider);
@@ -42,7 +48,6 @@ class HomeScreen extends ConsumerWidget {
         onAction: () => refreshBankViews(ref),
       );
     } else {
-      final user = profile.requireValue;
       final list = accounts.requireValue;
       final total = rates.hasValue
           ? totalInGel(list, rates.requireValue)
@@ -50,31 +55,28 @@ class HomeScreen extends ConsumerWidget {
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PageHeading(
-            title: BankingStrings.greeting(
-              user.displayName.trim().split(RegExp(r'\s+')).first,
-            ),
+          const TetriText(
+            BankingStrings.totalBalance,
+            style: TetriTextStyle.label,
+            secondary: true,
           ),
-          const SizedBox(height: TetriSpace.x32),
-          const SectionHeading(title: BankingStrings.totalBalance),
           const SizedBox(height: TetriSpace.x8),
           if (rates.isLoading)
             const Skeleton(height: TetriSizes.button56)
           else if (total != null)
             AmountText(total, size: AmountSize.display)
           else ...[
-            const InlineBanner(
-              message: BankingStrings.totalUnavailable,
-              kind: BannerKind.warning,
-            ),
-            TetriTextButton(
-              label: BankingStrings.retry,
-              onPressed: () => ref.invalidate(ratesProvider),
+            SectionHeading(
+              title: BankingStrings.totalUnavailable,
+              actionLabel: BankingStrings.retry,
+              onAction: () => ref.invalidate(ratesProvider),
             ),
           ],
           const SizedBox(height: TetriSpace.x32),
           AccountPager(
             accounts: list,
+            onPageChanged: (account) =>
+                setState(() => _currency = account.currency),
             onSelected: (account) => context.push('/accounts/${account.id}'),
           ),
           const SizedBox(height: TetriSpace.x24),
@@ -84,13 +86,13 @@ class HomeScreen extends ConsumerWidget {
               RoundAction(
                 icon: PhosphorIconsRegular.arrowUpRight,
                 label: BankingStrings.send,
-                onTap: () => context.push('/send?currency=GEL'),
+                onTap: () => context.push('/send?currency=$_currency'),
               ),
               const SizedBox(width: TetriSpace.x48),
               RoundAction(
                 icon: PhosphorIconsRegular.arrowsLeftRight,
                 label: BankingStrings.convert,
-                onTap: () => context.push('/convert?currency=GEL'),
+                onTap: () => context.push('/convert?currency=$_currency'),
               ),
             ],
           ),
@@ -123,7 +125,26 @@ class HomeScreen extends ConsumerWidget {
     }
     return TetriScaffold(
       bottomNavigationBar: const TetriNavigation(selectedIndex: 0),
-      child: content,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DashboardHeading(
+            title: profile.hasValue
+                ? BankingStrings.greeting(
+                    profile.requireValue.displayName
+                        .trim()
+                        .split(RegExp(r'\s+'))
+                        .first,
+                  )
+                : BankingStrings.home,
+            userId: profile.value?.id,
+            name: profile.value?.displayName,
+            onProfile: () => context.push('/settings'),
+          ),
+          const SizedBox(height: TetriSpace.x24),
+          content,
+        ],
+      ),
     );
   }
 }

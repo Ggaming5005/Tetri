@@ -4,6 +4,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tetri/core/session.dart';
 import 'package:tetri/core/strings_banking.dart';
 import 'package:tetri/design/components/selection_controls.dart';
+import 'package:tetri/design/components/browse_components.dart';
 import 'package:tetri/features/settings/settings_screen.dart';
 
 import '../helpers/banking_fakes.dart';
@@ -22,6 +23,26 @@ void main() {
     when(() => session.signOut()).thenAnswer((_) async {});
   });
   tearDown(() => theme.dispose());
+
+  testWidgets(
+    'settings is a back-navigation detail page outside the bottom tabs',
+    (tester) async {
+      await pumpBanking(
+        tester,
+        const SettingsScreen(),
+        FakeBankApi(),
+        session: session,
+        themePreference: theme,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(TetriNavigation), findsNothing);
+      final back = find.byTooltip(BankingStrings.back);
+      expect(back.hitTestable(), findsOneWidget);
+      await tester.tap(back);
+      await tester.pumpAndSettle();
+      expect(find.text('/home'), findsOneWidget);
+    },
+  );
 
   testWidgets('settings stays usable with enlarged text on a small phone', (
     tester,

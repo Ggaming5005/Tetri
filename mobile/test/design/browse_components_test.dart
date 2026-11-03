@@ -14,6 +14,55 @@ import '../helpers/pump_tetri.dart';
 
 void main() {
   testWidgets(
+    'bottom tabs are Home Payments Activity and Payments opens its hub',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpBanking(
+        tester,
+        const TetriScaffold(
+          bottomNavigationBar: TetriNavigation(selectedIndex: 1),
+          child: Text('Body'),
+        ),
+        FakeBankApi(),
+      );
+      await tester.pumpAndSettle();
+      final navigation = find.byType(TetriNavigation);
+      for (final label in [
+        BankingStrings.home,
+        BankingStrings.payments,
+        BankingStrings.activity,
+      ]) {
+        expect(
+          find.descendant(of: navigation, matching: find.text(label)),
+          findsOneWidget,
+        );
+      }
+      expect(
+        find.descendant(
+          of: navigation,
+          matching: find.text(BankingStrings.settings),
+        ),
+        findsNothing,
+      );
+      final payments = find.bySemanticsLabel(BankingStrings.payments);
+      expect(
+        tester.getSemantics(payments),
+        matchesSemantics(
+          label: BankingStrings.payments,
+          isButton: true,
+          hasSelectedState: true,
+          isSelected: true,
+          hasTapAction: true,
+        ),
+      );
+      await tester.tap(find.text(BankingStrings.payments));
+      await tester.pumpAndSettle();
+      expect(find.text('/payments'), findsOneWidget);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
     'account pager and reference remain readable at large text on a small phone',
     (tester) async {
       await pumpTetri(

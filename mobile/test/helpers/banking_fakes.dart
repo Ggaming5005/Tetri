@@ -128,6 +128,7 @@ Future<void> pumpBanking(
       GoRoute(path: '/test', builder: (context, state) => screen),
       for (final route in [
         '/home',
+        '/payments',
         '/activity',
         '/settings',
         '/send',

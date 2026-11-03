@@ -6,6 +6,7 @@ import '../tokens.dart';
 import '../typography.dart';
 import 'amount_text.dart';
 import 'buttons.dart';
+import 'browse_components.dart';
 
 final class ReviewLine {
   const ReviewLine.text(this.label, String text) : value = text, amount = null;
@@ -26,6 +27,7 @@ class ReviewSheet extends StatelessWidget {
     required this.onConfirm,
     this.confirmLabel = TetriStrings.confirm,
     this.isLoading = false,
+    this.includeKeyboardInset = true,
   });
 
   final String title;
@@ -33,69 +35,61 @@ class ReviewSheet extends StatelessWidget {
   final VoidCallback? onConfirm;
   final String confirmLabel;
   final bool isLoading;
+  final bool includeKeyboardInset;
 
   @override
   Widget build(BuildContext context) {
     final colors = TetriColors.of(context);
-    return SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          left: TetriSpace.x24,
-          right: TetriSpace.x24,
-          top: TetriSpace.x32,
-          bottom: TetriSpace.x24 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Semantics(
-              header: true,
-              child: Text(
-                title,
-                style: TetriTypography.headline.copyWith(
-                  color: colors.textPrimary,
-                ),
-              ),
+    return Align(
+      alignment: Alignment.topCenter,
+      widthFactor: 1,
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: TetriSizes.sheetMaxWidth),
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: TetriSpace.x24,
+              right: TetriSpace.x24,
+              top: TetriSpace.x24,
+              bottom:
+                  TetriSpace.x24 +
+                  (includeKeyboardInset
+                      ? MediaQuery.viewInsetsOf(context).bottom
+                      : 0),
             ),
-            const SizedBox(height: TetriSpace.x24),
-            for (final row in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: TetriSpace.x8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        row.label,
-                        style: TetriTypography.body.copyWith(
-                          color: colors.textSecondary,
-                        ),
-                      ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    title,
+                    style: TetriTypography.headline.copyWith(
+                      color: colors.textPrimary,
                     ),
-                    const SizedBox(width: TetriSpace.x16),
-                    Expanded(
-                      child: row.amount != null
-                          ? AmountText(row.amount!, textAlign: TextAlign.end)
-                          : Text(
-                              row.value!,
-                              textAlign: TextAlign.end,
-                              style: TetriTypography.body.copyWith(
-                                color: colors.textPrimary,
-                              ),
-                            ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            const SizedBox(height: TetriSpace.x24),
-            PrimaryButton(
-              label: confirmLabel,
-              onPressed: onConfirm,
-              isLoading: isLoading,
+                const SizedBox(height: TetriSpace.x24),
+                for (final row in rows)
+                  DetailLine(
+                    label: row.label,
+                    value: row.value,
+                    trailing: row.amount == null
+                        ? null
+                        : AmountText(row.amount!, textAlign: TextAlign.end),
+                  ),
+                const SizedBox(height: TetriSpace.x24),
+                PrimaryButton(
+                  label: confirmLabel,
+                  onPressed: onConfirm,
+                  isLoading: isLoading,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

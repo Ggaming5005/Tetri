@@ -116,6 +116,25 @@ void main() {
     expect(api.historyCalls.last.filter, 'sent');
   });
 
+  testWidgets('activity profile opens settings without extra profile reads', (
+    tester,
+  ) async {
+    var profileReads = 0;
+    final api = FakeBankApi()
+      ..profileHandler = () async {
+        profileReads++;
+        return sampleUser;
+      };
+    await pumpBanking(tester, const ActivityScreen(), api);
+    await tester.pumpAndSettle();
+    final profile = find.byTooltip(BankingStrings.profile);
+    expect(profile.hitTestable(), findsOneWidget);
+    await tester.tap(profile);
+    await tester.pumpAndSettle();
+    expect(find.text('/settings'), findsOneWidget);
+    expect(profileReads, 0);
+  });
+
   testWidgets('activity retries initial errors', (tester) async {
     var fail = true;
     final api = FakeBankApi()

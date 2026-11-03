@@ -13,13 +13,144 @@ import 'inline_banner.dart';
 import 'review_sheet.dart';
 
 class FlowNavigation extends StatelessWidget {
-  const FlowNavigation({super.key, required this.onBack});
+  const FlowNavigation({super.key, required this.onBack, this.title});
   final VoidCallback? onBack;
+  final String? title;
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: AlignmentDirectional.centerStart,
-    child: TetriTextButton(label: MoneyStrings.back, onPressed: onBack),
+  Widget build(BuildContext context) => title == null
+      ? Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TetriTextButton(label: MoneyStrings.back, onPressed: onBack),
+        )
+      : Row(
+          children: [
+            IconButton(
+              tooltip: MoneyStrings.back,
+              onPressed: onBack,
+              constraints: const BoxConstraints(
+                minWidth: TetriSizes.tap48,
+                minHeight: TetriSizes.tap48,
+              ),
+              icon: Icon(
+                PhosphorIconsRegular.arrowLeft,
+                size: TetriSizes.icon24,
+                color: TetriColors.of(context).textPrimary,
+              ),
+            ),
+            const SizedBox(width: TetriSpace.x8),
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  title!,
+                  style: TetriTypography.title.copyWith(
+                    color: TetriColors.of(context).textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+}
+
+/// Keeps account selection, amount and balance together at every screen width.
+class MoneyAccountPanel extends StatelessWidget {
+  const MoneyAccountPanel({
+    super.key,
+    required this.label,
+    required this.selector,
+    required this.child,
+    this.available,
+  });
+  final String label;
+  final Widget selector, child;
+  final Money? available;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: TetriColors.of(context).surface,
+      borderRadius: BorderRadius.circular(TetriRadii.r16),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(TetriSpace.x16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OverflowBar(
+            alignment: MainAxisAlignment.spaceBetween,
+            spacing: TetriSpace.x16,
+            overflowSpacing: TetriSpace.x4,
+            overflowAlignment: OverflowBarAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TetriTypography.label.copyWith(
+                  color: TetriColors.of(context).textSecondary,
+                ),
+              ),
+              IntrinsicWidth(child: selector),
+            ],
+          ),
+          const SizedBox(height: TetriSpace.x8),
+          child,
+          if (available != null) ...[
+            const SizedBox(height: TetriSpace.x8),
+            Wrap(
+              spacing: TetriSpace.x8,
+              runSpacing: TetriSpace.x4,
+              children: [
+                Text(
+                  MoneyStrings.available,
+                  style: TetriTypography.label.copyWith(
+                    color: TetriColors.of(context).textSecondary,
+                  ),
+                ),
+                AmountText(available!, size: AmountSize.label),
+              ],
+            ),
+          ],
+        ],
+      ),
+    ),
   );
+}
+
+class QuoteDetails extends StatelessWidget {
+  const QuoteDetails({super.key, required this.quote});
+  final FxQuote? quote;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TetriTypography.label.copyWith(
+      color: TetriColors.of(context).textSecondary,
+    );
+    final current = quote;
+    if (current == null) return Text(MoneyStrings.quoteEmpty, style: style);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          MoneyStrings.rateText(
+            current.amountIn.currency,
+            current.rate,
+            current.netOut.currency,
+          ),
+          style: style,
+        ),
+        const SizedBox(height: TetriSpace.x8),
+        _QuoteLine(
+          label: MoneyStrings.fee,
+          child: AmountText(current.fee, size: AmountSize.label),
+        ),
+        const SizedBox(height: TetriSpace.x8),
+        Text(
+          '${MoneyStrings.rateDate}: ${MoneyStrings.dateText(current.rateDate)}',
+          style: style,
+        ),
+      ],
+    );
+  }
 }
 
 class RecipientRow extends StatelessWidget {
@@ -210,6 +341,7 @@ class MoneyReviewSheet extends StatelessWidget {
   final String? notice;
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -224,6 +356,7 @@ class MoneyReviewSheet extends StatelessWidget {
             child: InlineBanner(message: notice!, kind: BannerKind.warning),
           ),
         ReviewSheet(
+          includeKeyboardInset: false,
           title: title,
           rows: rows,
           confirmLabel: confirmLabel,

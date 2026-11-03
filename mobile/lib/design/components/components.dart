@@ -7,6 +7,7 @@ export 'buttons.dart';
 export 'currency_picker.dart';
 export 'empty_state.dart';
 export 'inline_banner.dart';
+export 'money_amount_input.dart';
 export 'review_sheet.dart';
 export 'selection_controls.dart';
 export 'skeleton.dart';

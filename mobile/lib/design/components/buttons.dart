@@ -96,13 +96,15 @@ class _TetriButton extends StatelessWidget {
       minimumSize: WidgetStatePropertyAll(
         Size(TetriSizes.tap48, text ? TetriSizes.tap48 : TetriSizes.button56),
       ),
-      padding: const WidgetStatePropertyAll(
+      padding: WidgetStatePropertyAll(
         EdgeInsets.symmetric(
-          horizontal: TetriSpace.x24,
+          horizontal: text ? TetriSpace.x16 : TetriSpace.x24,
           vertical: TetriSpace.x12,
         ),
       ),
-      textStyle: WidgetStatePropertyAll(TetriTypography.title),
+      textStyle: WidgetStatePropertyAll(
+        text ? TetriTypography.label : TetriTypography.title,
+      ),
       elevation: const WidgetStatePropertyAll(TetriSizes.zero),
       shadowColor: const WidgetStatePropertyAll(Colors.transparent),
       surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -140,13 +142,14 @@ class _TetriButton extends StatelessWidget {
       liveRegion: isLoading,
       child: Stack(
         alignment: Alignment.center,
+        clipBehavior: Clip.none,
         children: [
           Visibility(
             visible: !isLoading,
             maintainSize: true,
             maintainAnimation: true,
             maintainState: true,
-            child: Text(label, textAlign: TextAlign.center),
+            child: Text(label, textAlign: TextAlign.center, softWrap: true),
           ),
           if (isLoading)
             ExcludeSemantics(

@@ -36,7 +36,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
   List<RecipientView> _recent = [];
   ApiError? _lookupError, _recentError;
   bool _lookupLoading = false, _recentLoading = true, _reviewOpen = false;
-  String _value = '0';
+  String _value = '';
   late String _currency;
 
   @override
@@ -114,6 +114,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
 
   Future<void> _openReview(Money amount) async {
     if (_reviewOpen) return;
+    FocusScope.of(context).unfocus();
     _reviewOpen = true;
     _controller.openReview(_recipient!, amount);
     final confirmed = await showModalBottomSheet<bool>(
@@ -121,6 +122,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
       isDismissible: false,
       enableDrag: false,
       isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: TetriSizes.sheetMaxWidth),
       useSafeArea: true,
       sheetAnimationStyle: moneySheetAnimation(context),
       builder: (sheetContext) => ListenableBuilder(
@@ -164,6 +166,12 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
     return PopScope(
       canPop: !_controller.isSubmitting && !_controller.uncertain,
       child: TetriScaffold(
+        fillViewport: _step == _SendStep.result,
+        bottomAction: _step == _SendStep.amount
+            ? accounts.whenOrNull(
+                data: (items) => items.isEmpty ? null : _continueButton(items),
+              )
+            : null,
         child: _step == _SendStep.result
             ? _result()
             : accounts.when(
@@ -183,13 +191,25 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           FlowNavigation(
-                            onBack: () {
-                              if (_step == _SendStep.amount) {
-                                setState(() => _step = _SendStep.recipient);
-                              } else {
-                                context.go('/home');
-                              }
-                            },
+                            title: _step == _SendStep.amount
+                                ? MoneyStrings.send
+                                : null,
+                            onBack: _reviewOpen
+                                ? null
+                                : () {
+                                    FocusScope.of(context).unfocus();
+                                    if (_step == _SendStep.amount) {
+                                      setState(
+                                        () => _step = _SendStep.recipient,
+                                      );
+                                    } else {
+                                      if (context.canPop()) {
+                                        context.pop();
+                                      } else {
+                                        context.go('/home');
+                                      }
+                                    }
+                                  },
                           ),
                           const SizedBox(height: TetriSpace.x16),
                           if (_step == _SendStep.recipient)
@@ -269,40 +289,55 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const PageHeading(title: MoneyStrings.amountTitle),
-        const SizedBox(height: TetriSpace.x24),
-        CurrencyPicker(
-          accounts: accounts,
-          selected: selected,
-          onChanged: (account) => setState(() {
-            _currency = account.currency;
-            _value = '0';
-          }),
-        ),
-        const SizedBox(height: TetriSpace.x24),
-        MoneyEntrySummary(
-          amount: amount,
-          available: selected.balance,
-          label: MoneyStrings.recipient(_recipient!.displayName),
+        RecipientRow(
+          recipient: _recipient!,
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            setState(() => _step = _SendStep.recipient);
+          },
         ),
         const SizedBox(height: TetriSpace.x16),
-        if (insufficient)
-          InlineBanner(
-            message: MoneyStrings.notEnough(selected.currency),
-            kind: BannerKind.warning,
+        MoneyAccountPanel(
+          label: MoneyStrings.youSend,
+          available: selected.balance,
+          selector: CurrencyPicker(
+            compact: true,
+            accounts: accounts,
+            selected: selected,
+            enabled: !_reviewOpen,
+            onChanged: (account) => setState(() {
+              _currency = account.currency;
+              _value = '';
+            }),
           ),
-        AmountKeypad(
-          value: _value,
-          onChanged: (value) => setState(() => _value = value),
-        ),
-        const SizedBox(height: TetriSpace.x24),
-        PrimaryButton(
-          label: MoneyStrings.continueLabel,
-          onPressed: amount.minor > 0 && !insufficient && !_reviewOpen
-              ? () => _openReview(amount)
-              : null,
+          child: MoneyAmountInput(
+            value: _value,
+            currency: selected.currency,
+            enabled: !_reviewOpen,
+            errorText: insufficient
+                ? MoneyStrings.notEnough(selected.currency)
+                : null,
+            onChanged: (value) => setState(() => _value = value),
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _continueButton(List<MoneyAccount> accounts) {
+    final selected = accounts.firstWhere(
+      (account) => account.currency == _currency,
+      orElse: () => accounts.first,
+    );
+    final amount = Money(MoneyInput.minorUnits(_value), selected.currency);
+    return PrimaryButton(
+      label: MoneyStrings.continueLabel,
+      onPressed:
+          amount.minor > 0 &&
+              amount.minor <= selected.balance.minor &&
+              !_reviewOpen
+          ? () => _openReview(amount)
+          : null,
     );
   }
 
@@ -317,6 +352,7 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
           : MoneyStrings.notSent,
       amount: _controller.review!.amount,
       isSuccess: successful,
+      isPending: _controller.uncertain,
       message: successful
           ? MoneyStrings.recipient(_controller.review!.recipient.displayName)
           : _controller.retryWindowExpired

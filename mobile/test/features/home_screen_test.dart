@@ -8,11 +8,46 @@ import 'package:tetri/design/components/account_card.dart';
 import 'package:tetri/design/components/amount_text.dart';
 import 'package:tetri/design/components/browse_components.dart';
 import 'package:tetri/features/home/home_screen.dart';
+import 'package:tetri/design/tokens.dart';
 
 import '../helpers/banking_fakes.dart';
 import '../helpers/golden_fonts.dart';
 
 void main() {
+  testWidgets(
+    'profile opens settings from the Home heading with an accessible target',
+    (tester) async {
+      await pumpBanking(
+        tester,
+        const HomeScreen(),
+        FakeBankApi(),
+        size: const Size(320, 640),
+        textScaler: const TextScaler.linear(2),
+      );
+      await tester.pumpAndSettle();
+      final profile = find.byTooltip(BankingStrings.profile);
+      expect(profile.hitTestable(), findsOneWidget);
+      expect(
+        tester.getSize(profile).width,
+        greaterThanOrEqualTo(TetriSizes.tap48),
+      );
+      expect(
+        tester.getSize(profile).height,
+        greaterThanOrEqualTo(TetriSizes.tap48),
+      );
+      expect(
+        find.descendant(
+          of: find.byType(TetriNavigation),
+          matching: find.text(BankingStrings.settings),
+        ),
+        findsNothing,
+      );
+      await tester.tap(profile);
+      await tester.pumpAndSettle();
+      expect(find.text('/settings'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'home fits a small phone with enlarged text and accessible navigation',
     (tester) async {
@@ -49,6 +84,10 @@ void main() {
     final api = FakeBankApi()..profileHandler = () => pending.future;
     await pumpBanking(tester, const HomeScreen(), api);
     expect(find.byType(LoadingList), findsWidgets);
+    expect(
+      find.byTooltip(BankingStrings.profile).hitTestable(),
+      findsOneWidget,
+    );
     pending.complete(sampleUser);
     await tester.pumpAndSettle();
     expect(find.text('Hello, Nino'), findsOneWidget);
@@ -66,6 +105,10 @@ void main() {
     await pumpBanking(tester, const HomeScreen(), api);
     await tester.pumpAndSettle();
     expect(find.text(BankingStrings.cannotLoad), findsOneWidget);
+    expect(
+      find.byTooltip(BankingStrings.profile).hitTestable(),
+      findsOneWidget,
+    );
     failed = false;
     await tester.tap(find.text(BankingStrings.retry));
     await tester.pumpAndSettle();
@@ -88,6 +131,40 @@ void main() {
       expect(find.text('/send?currency=GEL'), findsOneWidget);
     },
   );
+
+  for (final action in {
+    BankingStrings.send: '/send?currency=USD',
+    BankingStrings.convert: '/convert?currency=USD',
+  }.entries) {
+    testWidgets('${action.key} uses the account selected by swiping', (
+      tester,
+    ) async {
+      await pumpBanking(tester, const HomeScreen(), FakeBankApi());
+      await tester.pumpAndSettle();
+      final pager = find.descendant(
+        of: find.byType(AccountPager),
+        matching: find.byType(PageView),
+      );
+      await tester.ensureVisible(pager);
+      await tester.pumpAndSettle();
+      await tester.drag(pager, Offset(-tester.getSize(pager).width * 0.9, 0));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Semantics>(
+              find.byKey(const ValueKey('account-page-position')),
+            )
+            .properties
+            .label,
+        '${BankingStrings.account} 2/3, USD',
+      );
+      await tester.ensureVisible(find.text(action.key));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(action.key));
+      await tester.pumpAndSettle();
+      expect(find.text(action.value), findsOneWidget);
+    });
+  }
 
   testWidgets('home displays exact total and requests only five recent items', (
     tester,

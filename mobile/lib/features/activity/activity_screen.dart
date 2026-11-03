@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../../core/strings_banking.dart';
@@ -61,26 +62,23 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     return ListenableBuilder(
       listenable: _history,
       builder: (context, child) => TetriScaffold(
-        title: BankingStrings.activity,
         scrollController: _scroll,
-        bottomNavigationBar: const TetriNavigation(selectedIndex: 1),
+        bottomNavigationBar: const TetriNavigation(selectedIndex: 2),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Wrap(
-              spacing: TetriSpace.x8,
-              runSpacing: TetriSpace.x4,
-              children: [
-                for (final filter in filters.entries)
-                  TetriFilterChip(
-                    label: filter.value,
-                    selected: _history.filter == filter.key,
-                    onSelected: (_) {
-                      if (_scroll.hasClients) _scroll.jumpTo(0);
-                      unawaited(_history.refresh(newFilter: filter.key));
-                    },
-                  ),
-              ],
+            DashboardHeading(
+              title: BankingStrings.activity,
+              onProfile: () => context.push('/settings'),
+            ),
+            const SizedBox(height: TetriSpace.x24),
+            TetriFilterBar<String>(
+              filters: filters,
+              value: _history.filter,
+              onChanged: (filter) {
+                if (_scroll.hasClients) _scroll.jumpTo(0);
+                unawaited(_history.refresh(newFilter: filter));
+              },
             ),
             HistoryContent(controller: _history),
           ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../tokens.dart';
+import '../browse_tokens.dart';
 import '../typography.dart';
 
 class TetriSwitch extends StatelessWidget {
@@ -224,6 +225,54 @@ class TetriFilterChip extends StatelessWidget {
         pressElevation: TetriSizes.zero,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
+      ),
+    );
+  }
+}
+
+class TetriFilterBar<T> extends StatelessWidget {
+  const TetriFilterBar({
+    super.key,
+    required this.filters,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final Map<T, String> filters;
+  final T value;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = [
+      for (final filter in filters.entries)
+        TetriFilterChip(
+          label: filter.value,
+          selected: filter.key == value,
+          onSelected: (_) => onChanged(filter.key),
+        ),
+    ];
+    final largeText =
+        MediaQuery.textScalerOf(context)
+            .scale(TetriTypography.label.fontSize!) >=
+        TetriTypography.label.fontSize! *
+            TetriBrowseSizes.accessibilityTextScale;
+    if (largeText) {
+      return Wrap(
+        spacing: TetriSpace.x8,
+        runSpacing: TetriSpace.x4,
+        children: chips,
+      );
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var index = 0; index < chips.length; index++) ...[
+            if (index > 0) const SizedBox(width: TetriSpace.x8),
+            chips[index],
+          ],
+        ],
       ),
     );
   }

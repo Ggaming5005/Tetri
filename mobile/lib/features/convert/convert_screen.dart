@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:phosphor_glyphs/phosphor_glyphs.dart';
 
 import '../../core/api_models.dart';
 import '../../core/money.dart';
@@ -24,7 +23,7 @@ class ConvertScreen extends ConsumerStatefulWidget {
 class _ConvertScreenState extends ConsumerState<ConvertScreen> {
   late final ConversionController _controller;
   late String _from, _to;
-  String _value = '0';
+  String _value = '';
   bool _resultVisible = false, _reviewOpen = false;
 
   @override
@@ -57,6 +56,7 @@ class _ConvertScreenState extends ConsumerState<ConvertScreen> {
 
   Future<void> _continue() async {
     if (_reviewOpen || _controller.reviewLoading) return;
+    FocusScope.of(context).unfocus();
     if (await _controller.openReview() && mounted) await _showReview();
   }
 
@@ -73,6 +73,7 @@ class _ConvertScreenState extends ConsumerState<ConvertScreen> {
       isDismissible: false,
       enableDrag: false,
       isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: TetriSizes.sheetMaxWidth),
       useSafeArea: true,
       sheetAnimationStyle: moneySheetAnimation(context),
       builder: (sheetContext) => ListenableBuilder(
@@ -149,6 +150,15 @@ class _ConvertScreenState extends ConsumerState<ConvertScreen> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_controller.isSubmitting && !_controller.uncertain,
     child: TetriScaffold(
+      fillViewport: _resultVisible,
+      bottomAction: _resultVisible
+          ? null
+          : ref
+                .watch(accountsProvider)
+                .whenOrNull(
+                  data: (accounts) =>
+                      accounts.length < 2 ? null : _continueButton(accounts),
+                ),
       child: _resultVisible
           ? _result()
           : ref
@@ -189,72 +199,87 @@ class _ConvertScreenState extends ConsumerState<ConvertScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FlowNavigation(onBack: busy ? null : () => context.go('/home')),
-        const SizedBox(height: TetriSpace.x16),
-        const PageHeading(
-          title: MoneyStrings.convertTitle,
-          subtitle: MoneyStrings.convertHint,
-        ),
-        const SizedBox(height: TetriSpace.x24),
-        const SectionHeading(title: MoneyStrings.from),
-        const SizedBox(height: TetriSpace.x8),
-        CurrencyPicker(
-          accounts: accounts,
-          selected: from,
-          enabled: !busy,
-          onChanged: (account) => _update(from: account.currency),
+        FlowNavigation(
+          title: MoneyStrings.convert,
+          onBack: busy
+              ? null
+              : () {
+                  FocusScope.of(context).unfocus();
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/home');
+                  }
+                },
         ),
         const SizedBox(height: TetriSpace.x16),
-        const SectionHeading(title: MoneyStrings.to),
-        const SizedBox(height: TetriSpace.x8),
-        CurrencyPicker(
-          accounts: targets,
-          selected: to,
-          enabled: !busy,
-          onChanged: (account) => _update(to: account.currency),
-        ),
-        const SizedBox(height: TetriSpace.x24),
-        MoneyEntrySummary(amount: amount, available: from.balance),
-        const SizedBox(height: TetriSpace.x16),
-        if (insufficient)
-          InlineBanner(
-            message: MoneyStrings.notEnough(from.currency),
-            kind: BannerKind.warning,
+        MoneyAccountPanel(
+          label: MoneyStrings.from,
+          available: from.balance,
+          selector: CurrencyPicker(
+            compact: true,
+            accounts: accounts,
+            selected: from,
+            enabled: !busy,
+            onChanged: (account) => _update(from: account.currency),
           ),
-        AmountKeypad(
-          value: _value,
-          enabled: !busy,
-          onChanged: (value) => _update(value: value),
+          child: MoneyAmountInput(
+            value: _value,
+            currency: from.currency,
+            enabled: !busy,
+            errorText: insufficient
+                ? MoneyStrings.notEnough(from.currency)
+                : null,
+            onChanged: (value) => _update(value: value),
+          ),
+        ),
+        const SizedBox(height: TetriSpace.x12),
+        MoneyAccountPanel(
+          label: MoneyStrings.youGet,
+          selector: CurrencyPicker(
+            compact: true,
+            accounts: targets,
+            selected: to,
+            enabled: !busy,
+            onChanged: (account) => _update(to: account.currency),
+          ),
+          child: _controller.previewLoading
+              ? const Skeleton(height: TetriSpace.x48)
+              : AmountText(
+                  _controller.preview?.netOut ?? Money(0, to.currency),
+                  size: AmountSize.title,
+                ),
         ),
         const SizedBox(height: TetriSpace.x16),
-        if (_controller.previewLoading)
-          const Skeleton(height: TetriSizes.scaffoldExpandedHeight)
-        else if (_controller.error != null)
+        if (_controller.error != null)
           PageMessage(
             message: _controller.error!.message,
             actionLabel: MoneyStrings.retry,
             onAction: _controller.loadPreview,
           )
-        else if (_controller.preview != null)
-          QuoteSummary(quote: _controller.preview!)
         else
-          const PageMessage(
-            icon: PhosphorIconsRegular.arrowsLeftRight,
-            message: MoneyStrings.quoteEmpty,
-          ),
-        const SizedBox(height: TetriSpace.x24),
-        PrimaryButton(
-          label: MoneyStrings.continueLabel,
-          isLoading: _controller.reviewLoading,
-          onPressed:
-              !busy &&
-                  amount.minor > 0 &&
-                  !insufficient &&
-                  _controller.preview != null
-              ? _continue
-              : null,
-        ),
+          QuoteDetails(quote: _controller.preview),
       ],
+    );
+  }
+
+  Widget _continueButton(List<MoneyAccount> accounts) {
+    final from = accounts.firstWhere(
+      (account) => account.currency == _from,
+      orElse: () => accounts.first,
+    );
+    final minor = MoneyInput.minorUnits(_value);
+    return PrimaryButton(
+      label: MoneyStrings.continueLabel,
+      isLoading: _controller.reviewLoading,
+      onPressed:
+          !_controller.reviewLoading &&
+              !_reviewOpen &&
+              minor > 0 &&
+              minor <= from.balance.minor &&
+              _controller.preview != null
+          ? _continue
+          : null,
     );
   }
 
@@ -275,6 +300,7 @@ class _ConvertScreenState extends ConsumerState<ConvertScreen> {
           : MoneyStrings.notConverted,
       amount: amount,
       isSuccess: successful,
+      isPending: _controller.uncertain,
       message: successful
           ? null
           : _controller.retryWindowExpired
