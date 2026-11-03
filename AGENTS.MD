@@ -406,8 +406,8 @@ Every screen must handle four states: loading (skeleton), empty, error (with ret
 
 1. **Welcome**: wordmark, one line ("Simple money, done right." or similar), Create account and Sign in buttons. A small "Sandbox, no real money" label.
 2. **Sign up**: one field per step (email, name, handle, password), with a progress indicator. Handle availability is checked as you type against `GET /auth/handle-available` (debounced 400 ms). If registration still returns `handle_taken`, go back to the handle step with that message.
-3. **Sign in**: email and password. After the first sign in, offer to enable biometric unlock.
-4. **Lock screen**: on app open with biometrics enabled, unlock with Face ID or fingerprint. The refresh token lives in secure storage and is only read after biometric success.
+3. **Sign in**: email and password. After sign-in, create and confirm a four-digit app PIN, then offer biometric unlock. Existing sessions without a PIN enroll after authenticating with their existing unlock method (user refinement, 3 November 2026).
+4. **Lock screen**: Welcome back offers a masked four-digit app PIN using the phone's native keyboard, alongside Face ID or fingerprint when enabled. The refresh token lives in secure storage and is read only after successful PIN or biometric verification. Store a salted PIN verifier in secure storage, never the plaintext PIN; persist failed attempts before verification, delay after five failures, and require fingerprint or account sign-in after ten. Forgot PIN clears only the local saved session before returning to account sign-in. Keep pending payment state through ordinary locking/unlocking.
 5. **Home**: greeting with first name and a top-right profile button opening Settings, total balance in GEL equivalent (displayAmount), an account card pager (GEL, USD, EUR), two quick actions (Send, Convert) as round icon buttons with labels, and recent activity (last 5 rows) with "See all". Bottom navigation is Home, Payments, Activity. Payments is a simple hub for Send money and Convert currencies. Settings is a secondary page with back navigation, not a bottom tab (user design refinement, 3 November 2026).
 6. **Account detail**: balance (titleAmount), account actions, and full history for that account with infinite scroll.
 7. **Send money**, a four-step flow:
@@ -418,7 +418,7 @@ Every screen must handle four states: loading (skeleton), empty, error (with ret
 8. **Convert**: compact from and to account panels, native AmountInput, live preview (rate, fee, you get) refreshed when the amount changes (debounced 300 ms). Keep the layout simple and responsive without a permanent custom keypad. Continue creates a fresh quote and opens the review with exactly the quoted numbers and the NBG rate date. Confirm sends that `quoteId`. On `quote_expired`, fetch a new quote and show the review again with a short note that the rate was refreshed; never execute terms the user did not see.
 9. **Activity**: all transactions grouped by date, with a filter chip row (All, Sent, Received, Conversions).
 10. **Transaction detail**: big amount, status, counterparty, date and time, reference id (copyable), and for conversions the rate and fee.
-11. **Settings**: profile, biometric toggle, theme (system, light, dark), about (version, link to the GitHub repo), sign out.
+11. **Settings**: profile, change app PIN (current PIN required), biometric toggle, theme (system, light, dark), about (version, link to the GitHub repo), sign out.
 
 **Token refresh in the app:** the dio interceptor refreshes on 401 through a single shared operation. If several requests get a 401 at the same time, only the first starts a refresh. The rest wait for that same result, then retry with the new access token. A refresh is never run twice in parallel.
 
@@ -491,6 +491,7 @@ Rate limiting: the shared test host raises every rate limit through configuratio
 - Refresh failure handling: 401 `refresh_invalid` clears tokens and routes to sign in; a timeout retries with the same old token; no network, 5xx and 429 keep the tokens and show the retryable error state. Only the first case signs the user out.
 - Widget tests for each design component.
 - Golden tests for Home and the Send review sheet, in light and dark mode.
+- PIN enrollment/confirmation, masked native input, wrong-PIN throttling across restarts, hard attempt limit, biometric fallback, local recovery, and no session read before successful unlock. Backgrounding during verification must not reveal private screens.
 
 ## 12. Build phases
 

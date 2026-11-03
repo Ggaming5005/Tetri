@@ -28,6 +28,7 @@ void main() {
         (tester) async {
           final session = _Session();
           when(() => session.biometricsEnabled).thenReturn(false);
+          when(() => session.pinEnabled).thenReturn(true);
           final theme = ValueNotifier(ThemeMode.system);
           addTearDown(theme.dispose);
           for (final screen in const [

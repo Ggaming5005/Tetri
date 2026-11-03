@@ -29,8 +29,34 @@ abstract final class AuthStrings {
   static const unlockTitle = 'Welcome back';
   static const unlockHint = 'Unlock Tetri to see your accounts.';
   static const unlock = 'Unlock';
-  static const unlockCancelled =
-      'Unlock was cancelled. Tap Unlock to try again.';
+  static const unlockCancelled = 'Biometric unlock was cancelled. Try again.';
+  static const appPin = 'App PIN';
+  static const pinUnlockHint = 'Enter your four-digit PIN to open Tetri.';
+  static const useBiometrics = 'Use fingerprint or face';
+  static const forgotPin = 'Forgot PIN?';
+  static const signInInstead = 'Sign in instead';
+  static const resetPinTitle = 'Sign in again?';
+  static const resetPinHint =
+      'This removes the saved sign-in and PIN from this phone. Your accounts and money stay safe. Sign in with your email and password to choose a new PIN.';
+  static const cancel = 'Cancel';
+  static const setAppPin = 'Set app PIN';
+  static const changeAppPin = 'Change app PIN';
+  static const createPinTitle = 'Choose your PIN';
+  static const createPinHint =
+      'Choose four digits to unlock Tetri on this phone.';
+  static const confirmPinTitle = 'Confirm your PIN';
+  static const confirmPinHint = 'Enter the same four digits once more.';
+  static const currentPinTitle = 'Enter your current PIN';
+  static const currentPinHint = 'Confirm your current PIN before changing it.';
+  static const currentPin = 'Current PIN';
+  static const newPin = 'New PIN';
+  static const confirmPin = 'Confirm PIN';
+  static const savePin = 'Save PIN';
+  static const pinMismatch = 'Those PINs do not match. Try again.';
+  static const pinOperationFailed =
+      'Your PIN could not be checked or saved. Try again.';
+  static const localResetFailed =
+      'Your saved sign-in could not be removed. Try again.';
   static const biometricTitle = 'A quicker way in';
   static const biometricHint =
       'Use your fingerprint or face to unlock Tetri on this phone.';

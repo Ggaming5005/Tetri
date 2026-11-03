@@ -7,14 +7,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api_error.dart';
+import '../../core/app_pin.dart';
 import '../../core/providers.dart';
 import '../../core/strings.dart';
 import '../../core/strings_auth.dart';
 import '../../design/components/components.dart';
 import '../../design/components/content.dart';
+import '../../design/components/confirmation_dialog.dart';
+import '../../design/components/pin_input.dart';
 import '../../design/tokens.dart';
 
 String authError(Object error) => switch (error) {
+  PinException(:final message) => message,
   ApiError(code: 'handle_taken') => AuthStrings.handleTaken,
   ApiError(code: 'email_taken') => AuthStrings.emailTaken,
   ApiError(code: 'invalid_credentials') => AuthStrings.invalidCredentials,
@@ -22,6 +26,18 @@ String authError(Object error) => switch (error) {
   ApiError(:final message) => message,
   _ => TetriStrings.offline,
 };
+
+Future<bool> _confirmSessionReset(BuildContext context) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => const ConfirmationDialog(
+        title: AuthStrings.resetPinTitle,
+        message: AuthStrings.resetPinHint,
+        confirmLabel: AuthStrings.signIn,
+        cancelLabel: AuthStrings.cancel,
+      ),
+    ) ??
+    false;
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -396,10 +412,41 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   }
 }
 
-class StartupScreen extends ConsumerWidget {
+class StartupScreen extends ConsumerStatefulWidget {
   const StartupScreen({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) => ListenableBuilder(
+  ConsumerState<StartupScreen> createState() => _StartupScreenState();
+}
+
+class _StartupScreenState extends ConsumerState<StartupScreen> {
+  bool _busy = false;
+  bool _confirmingReset = false;
+  String? _resetError;
+
+  Future<void> _reset() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _confirmingReset = true;
+    });
+    try {
+      if (!await _confirmSessionReset(context) || !mounted) return;
+      setState(() => _confirmingReset = false);
+      await ref.read(sessionProvider).resetLocalSession();
+    } catch (_) {
+      if (mounted) setState(() => _resetError = AuthStrings.localResetFailed);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _confirmingReset = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
     listenable: ref.watch(sessionProvider),
     builder: (context, _) {
       final session = ref.read(sessionProvider);
@@ -418,8 +465,16 @@ class StartupScreen extends ConsumerWidget {
               const SizedBox(height: TetriSpace.x24),
               PrimaryButton(
                 label: TetriStrings.retry,
-                onPressed: session.initialize,
+                onPressed: _busy ? null : session.initialize,
               ),
+              const SizedBox(height: TetriSpace.x12),
+              TetriTextButton(
+                label: AuthStrings.signInInstead,
+                onPressed: _busy ? null : _reset,
+                isLoading: _busy && !_confirmingReset,
+              ),
+              if (_resetError != null)
+                InlineBanner(message: _resetError!, kind: BannerKind.warning),
             ] else ...[
               const Skeleton(
                 height: TetriSizes.button56,
@@ -442,8 +497,94 @@ class LockScreen extends ConsumerStatefulWidget {
 }
 
 class _LockScreenState extends ConsumerState<LockScreen> {
+  final _pin = TextEditingController();
   bool _busy = false;
+  bool _confirmingReset = false;
   String? _error;
+  DateTime? _retryAt;
+  Timer? _retryTimer;
+
+  bool get _coolingDown =>
+      _retryAt != null && DateTime.now().isBefore(_retryAt!);
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    _pin.dispose();
+    super.dispose();
+  }
+
+  void _setCooldown(DateTime? retryAt) {
+    _retryTimer?.cancel();
+    _retryAt = retryAt;
+    if (!_coolingDown) return;
+    _retryTimer = Timer(retryAt!.difference(DateTime.now()), () {
+      if (mounted) {
+        setState(() {
+          _retryAt = null;
+          _error = null;
+        });
+      }
+    });
+  }
+
+  Future<void> _unlockPin() async {
+    if (_busy ||
+        _coolingDown ||
+        _pin.text.length != AppPinController.pinLength) {
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final unlocked = await ref.read(sessionProvider).unlockWithPin(_pin.text);
+      if (mounted && !unlocked) {
+        setState(() => _error = AuthStrings.pinOperationFailed);
+      }
+    } on PinException catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _setCooldown(error.retryAt);
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = AuthStrings.pinOperationFailed);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _pin.clear();
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _reset() async {
+    if (_busy) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _busy = true;
+      _confirmingReset = true;
+    });
+    try {
+      if (!await _confirmSessionReset(context) || !mounted) return;
+      setState(() => _confirmingReset = false);
+      await ref.read(sessionProvider).resetLocalSession();
+    } catch (_) {
+      if (mounted) setState(() => _error = AuthStrings.localResetFailed);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _confirmingReset = false;
+        });
+      }
+    }
+  }
 
   Future<void> _unlock() async {
     if (_busy) return;
@@ -464,29 +605,68 @@ class _LockScreenState extends ConsumerState<LockScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => TetriScaffold(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: TetriSpace.x64),
-        const TetriWordmark(),
-        const SizedBox(height: TetriSpace.x48),
-        const AuthHeader(
-          title: AuthStrings.unlockTitle,
-          subtitle: AuthStrings.unlockHint,
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: ref.watch(sessionProvider),
+    builder: (context, _) {
+      final session = ref.read(sessionProvider);
+      return TetriScaffold(
+        bottomAction: session.pinEnabled
+            ? PrimaryButton(
+                label: AuthStrings.unlock,
+                onPressed:
+                    !_busy &&
+                        !_coolingDown &&
+                        _pin.text.length == AppPinController.pinLength
+                    ? _unlockPin
+                    : null,
+                isLoading: _busy && !_confirmingReset,
+              )
+            : null,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: TetriSpace.x24),
+            const TetriWordmark(),
+            const SizedBox(height: TetriSpace.x32),
+            AuthHeader(
+              title: AuthStrings.unlockTitle,
+              subtitle: session.pinEnabled
+                  ? AuthStrings.pinUnlockHint
+                  : AuthStrings.unlockHint,
+            ),
+            const SizedBox(height: TetriSpace.x24),
+            if (session.pinEnabled) ...[
+              PinInput(
+                label: AuthStrings.appPin,
+                controller: _pin,
+                enabled: !_busy && !_coolingDown,
+                errorText: _error,
+                onChanged: (_) => setState(() => _error = null),
+              ),
+              const SizedBox(height: TetriSpace.x24),
+            ] else if (_error != null) ...[
+              InlineBanner(message: _error!, kind: BannerKind.warning),
+              const SizedBox(height: TetriSpace.x24),
+            ],
+            if (session.biometricsEnabled)
+              SecondaryButton(
+                label: session.pinEnabled
+                    ? AuthStrings.useBiometrics
+                    : AuthStrings.unlock,
+                onPressed: _busy ? null : _unlock,
+                isLoading: _busy && !_confirmingReset && !session.pinEnabled,
+              ),
+            const SizedBox(height: TetriSpace.x12),
+            TetriTextButton(
+              label: session.pinEnabled
+                  ? AuthStrings.forgotPin
+                  : AuthStrings.signInInstead,
+              onPressed: _busy ? null : _reset,
+            ),
+          ],
         ),
-        const SizedBox(height: TetriSpace.x48),
-        if (_error != null) ...[
-          InlineBanner(message: _error!, kind: BannerKind.warning),
-          const SizedBox(height: TetriSpace.x24),
-        ],
-        PrimaryButton(
-          label: AuthStrings.unlock,
-          onPressed: _unlock,
-          isLoading: _busy,
-        ),
-      ],
-    ),
+      );
+    },
   );
 }
 

@@ -18,7 +18,11 @@ import 'package:tetri/core/strings_auth.dart';
 import 'package:tetri/core/strings_money.dart';
 import 'package:tetri/design/components/money_amount_input.dart';
 import 'package:tetri/design/components/money_flow_components.dart';
+import 'package:tetri/design/components/buttons.dart';
+import 'package:tetri/design/components/confirmation_dialog.dart';
+import 'package:tetri/design/components/pin_input.dart';
 import 'package:tetri/features/auth/auth_screens.dart';
+import 'package:tetri/features/auth/pin_setup_screen.dart';
 import 'package:tetri/features/home/home_screen.dart';
 import 'package:tetri/features/transfer/transfer_screen.dart';
 
@@ -32,12 +36,25 @@ class _Session extends SessionController {
   _Session(this.state)
     : super(dio: Dio(), store: _Store(), biometrics: _Biometrics());
   SessionStatus state;
+  bool hasPin = true;
+  bool hasBiometrics = true;
+  final pinAttempts = <String>[];
   @override
   SessionStatus get status => state;
   @override
   AuthUser? get user => state == SessionStatus.signedIn ? sampleUser : null;
   @override
   bool get shouldOfferBiometrics => false;
+  @override
+  bool get pinEnabled => hasPin;
+  @override
+  bool get biometricsEnabled => hasBiometrics;
+  @override
+  Future<bool> unlockWithPin(String pin) async {
+    pinAttempts.add(pin);
+    return false;
+  }
+
   void change(SessionStatus next) {
     state = next;
     notifyListeners();
@@ -126,6 +143,22 @@ void main() {
     expect(find.byType(SignUpScreen), findsOneWidget);
   });
 
+  testWidgets('authenticated sessions set up a PIN before reaching accounts', (
+    tester,
+  ) async {
+    final session = _Session(SessionStatus.signedIn)..hasPin = false;
+    await pump(tester, session);
+    expect(find.byType(PinSetupScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsNothing);
+    GoRouter.of(tester.element(find.byType(PinSetupScreen))).go('/home');
+    await tester.pumpAndSettle();
+    expect(find.byType(PinSetupScreen), findsOneWidget);
+    session.hasPin = true;
+    session.change(SessionStatus.signedIn);
+    await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
   testWidgets('expired session removes private screen and routes to sign in', (
     tester,
   ) async {
@@ -151,6 +184,107 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(HomeScreen), findsOneWidget);
   });
+
+  testWidgets(
+    'cold lock reset dialog cancels without exposing private routes',
+    (tester) async {
+      final session = _Session(SessionStatus.locked)..hasBiometrics = false;
+      await pump(tester, session);
+      await tester.tap(find.text(AuthStrings.forgotPin));
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfirmationDialog), findsOneWidget);
+      expect(find.text(AuthStrings.resetPinHint), findsOneWidget);
+      expect(find.byType(HomeScreen), findsNothing);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text(AuthStrings.cancel));
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfirmationDialog), findsNothing);
+      expect(find.byType(LockScreen), findsOneWidget);
+      expect(session.status, SessionStatus.locked);
+      expect(find.byType(HomeScreen), findsNothing);
+
+      await tester.tap(find.text(AuthStrings.forgotPin));
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfirmationDialog), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfirmationDialog), findsNothing);
+      expect(find.byType(LockScreen), findsOneWidget);
+      expect(session.status, SessionStatus.locked);
+      expect(find.byType(HomeScreen), findsNothing);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(LockScreen), findsOneWidget);
+      expect(find.byType(HomeScreen), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final keyboardHeight in [300.0, 480.0]) {
+    testWidgets(
+      'cold PIN-only lock enables visible Unlock after IME edits with $keyboardHeight inset',
+      (tester) async {
+        final session = _Session(SessionStatus.locked)..hasBiometrics = false;
+        await pump(tester, session);
+        final pinInput = find.byType(PinInput);
+        final field = find.descendant(
+          of: pinInput,
+          matching: find.byType(TextField),
+        );
+        expect(pinInput, findsOneWidget);
+        final controller = tester.widget<TextField>(field).controller!;
+        final button = find.descendant(
+          of: find.byType(LockScreen),
+          matching: find.byType(PrimaryButton),
+        );
+        expect(tester.widget<PrimaryButton>(button).onPressed, isNull);
+        await tester.tap(field);
+        await tester.pump();
+        tester.view.viewInsets = FakeViewPadding(bottom: keyboardHeight);
+        addTearDown(tester.view.resetViewInsets);
+        await tester.pumpAndSettle();
+        for (final text in ['0', '05', '057', '0572']) {
+          tester.testTextInput.updateEditingValue(
+            TextEditingValue(
+              text: text,
+              selection: TextSelection.collapsed(offset: text.length),
+            ),
+          );
+          await tester.pump();
+        }
+        expect(tester.widget<TextField>(field).controller, same(controller));
+        expect(controller.text.length, 4);
+        expect(tester.widget<TextField>(field).enabled, isTrue);
+        expect(tester.widget<PrimaryButton>(button).onPressed, isNotNull);
+
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '057',
+            selection: TextSelection.collapsed(offset: 3),
+          ),
+        );
+        await tester.pump();
+        expect(tester.widget<PrimaryButton>(button).onPressed, isNull);
+        tester.testTextInput.updateEditingValue(
+          const TextEditingValue(
+            text: '0572',
+            selection: TextSelection.collapsed(offset: 4),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.widget<PrimaryButton>(button).onPressed, isNotNull);
+        await tester.ensureVisible(find.text(AuthStrings.unlock));
+        await tester.pumpAndSettle();
+        expect(find.text(AuthStrings.unlock).hitTestable(), findsOneWidget);
+        await tester.tap(find.text(AuthStrings.unlock));
+        await tester.pumpAndSettle();
+        expect(session.pinAttempts, ['0572']);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('lock and system back preserve the live transfer state', (
     tester,

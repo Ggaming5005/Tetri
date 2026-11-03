@@ -4,6 +4,8 @@ This record separates automated checks, observed Android behavior and work still
 
 ## Current status
 
+The four-digit app PIN update passes **336 Flutter tests** locally, with analysis reporting zero issues. Tests cover enrollment/confirmation, masked native input, persisted attempt limits, biometric fallback, local recovery and background/session-expiry races. The actual Android API 36 [native derivation probe](app-lock.md#reproducible-vectors-and-verification-status) also passed. Phone PIN and fingerprint acceptance is recorded below.
+
 As recorded on **3 November 2026**, [CI run 41689180899](https://github.com/Ggaming5005/Tetri/actions/runs/41689180899) passed both jobs:
 
 - **185 backend tests**: 56 unit and 129 real PostgreSQL integration tests, with the full suite run three consecutive times.
@@ -18,8 +20,10 @@ Phases 1–4 have passed their gates. Phase 5 screens are implemented and most A
 | --- | --- |
 | Android API 36 emulator, 360 dp wide | Light/dark component gallery and transfer review visually checked; debug APK runs |
 | Android emulator, banking app | New user received all three starter balances and sent 25.00 GEL to a second user; activity displayed the transfer; API reads confirmed GEL balances of 975.00 and 1,025.00 |
+| Android API 36 emulator, app PIN update | Native keyboard enabled Unlock after four digits; wrong PIN showed an error and stayed locked; correct PIN restored Home after process restart; Forgot PIN opened its confirmation and Cancel preserved the lock |
 | Physical Android phone | New user registered and received all three starter balances; enabled and authenticated biometric unlock; sent 12.50 USD using the native keyboard; activity displayed the transfer; API read confirmed the remaining USD balance of 287.50 |
 | Physical Android phone after upgrading/reopening | Biometric unlock was required and the saved session was restored |
+| Physical Android 13 phone, app PIN update | User privately created and confirmed a four-digit PIN, reached Home, force-stopped/reopened the app and unlocked with the PIN; separate fingerprint authentication also returned to Home |
 | Live FX conversion | Pending: the undated NBG feed supplied rates effective **4 November 2026**, which the fresh local database refused to use before that UTC date; it returned `rates_unavailable` |
 
 Conversion controller tests and real PostgreSQL conversion API tests pass with controlled rate fixtures. They do not replace the remaining physical-device conversion check against effective live rates. A published release APK, hosted API and final install-from-README acceptance are also pending.
@@ -112,7 +116,7 @@ Refresh retries never extend the original **60-second grace window**. If a refre
 ### Phase 5 — app screens, acceptance in progress
 
 - Welcome, stepped signup, sign-in, biometric lock, Home, account history, Send, Convert, Payments, Activity, transaction detail and Settings are wired into the app. Data screens use the real API.
-- The latest local suite passes **289 Flutter tests**, analysis reports zero issues and the debug APK builds.
+- The latest local suite passes **336 Flutter tests**, analysis reports zero issues and the debug APK builds.
 - Emulator and physical-device results are recorded above. The physical-device conversion gate remains open.
 - Evidence: [initial Phase 5 CI, 41684578673](https://github.com/Ggaming5005/Tetri/actions/runs/41684578673); [navigation/layout update CI, 41689180899](https://github.com/Ggaming5005/Tetri/actions/runs/41689180899). Both jobs passed in each run; the latest run contains 289 Flutter tests and three full runs of the 185 backend tests.
 

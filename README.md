@@ -31,7 +31,7 @@ flowchart LR
   Review --> Activity[Result and activity]
 ```
 
-You can build and install a local debug APK with the commands below. A published release APK and hosted API are **not available yet**; there are no shared demo credentials. Signup, biometric unlock and a 12.50 USD transfer have been verified on a physical Android phone. The live currency-conversion check remains pending because the local NBG feed supplied future-dated rates. [Verification record and remaining gates →](docs/verification.md)
+You can build and install a local debug APK with the commands below. A published release APK and hosted API are **not available yet**; there are no shared demo credentials. Signup, PIN and fingerprint unlock, and a 12.50 USD transfer have been verified on a physical Android phone. The live currency-conversion check remains pending because the local NBG feed supplied future-dated rates. [Verification record and remaining gates →](docs/verification.md)
 
 ## How the money works
 
@@ -56,11 +56,11 @@ The concurrency test sends **50 simultaneous requests for 10.00 GEL** against an
 | Check | Verified result |
 | --- | --- |
 | Backend | **185 tests**: 56 unit + 129 integration tests against real PostgreSQL; three consecutive CI runs |
-| Mobile | **289 tests**, including light/dark Home and Send-review goldens; analysis reports zero issues |
+| Mobile | **336 tests**, including PIN/session security, responsive layouts and light/dark Home and Send-review goldens; analysis reports zero issues |
 | Startup | Docker Compose builds the API, starts PostgreSQL and passes the HTTP health check |
-| Physical Android | Signup, all starter balances, biometric unlock, 12.50 USD transfer, activity and restored session |
+| Physical Android | Signup, all starter balances, PIN and fingerprint unlock, 12.50 USD transfer, activity and restored session |
 
-[Latest verified CI run](https://github.com/Ggaming5005/Tetri/actions/runs/41689180899) · [Test commands, phase history and open acceptance checks](docs/verification.md)
+[CI runs](https://github.com/Ggaming5005/Tetri/actions/workflows/ci.yml) · [Test commands, phase history and open acceptance checks](docs/verification.md)
 
 ## Tech stack
 
@@ -131,7 +131,7 @@ flutter build apk --debug --dart-define=TETRI_API_URL=http://127.0.0.1:5080/api/
 adb -s <device-id> install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-Keep Docker Compose running while using the app. Local HTTP is allowed only by the Android debug manifest. With biometrics enabled, the saved session is read only after successful authentication; locking also preserves a pending payment's confirmation key. Refresh retries share a fixed 60-second grace window: if a refresh response is lost and the phone stays offline longer, sign in again.
+Keep Docker Compose running while using the app. Local HTTP is allowed only by the Android debug manifest. After sign-in, choose and confirm a four-digit app PIN; fingerprint or face unlock remains optional. Existing biometric sessions first unlock, then create their PIN. The saved session is read only after successful PIN or biometric verification, and locking preserves a pending payment's confirmation key. [App lock and recovery](docs/app-lock.md) explains attempt limits and forgotten-PIN recovery. Refresh retries share a fixed 60-second grace window: if a refresh response is lost and the phone stays offline longer, sign in again.
 
 The debug-only component gallery runs with `flutter run --dart-define=TETRI_GALLERY=true`, or opens by long-pressing the Welcome wordmark. [Build/test commands and golden-test guidance](docs/verification.md#run-the-checks) are in the verification guide. Stop the API from the repository root with `docker compose down`; this preserves database data.
 
@@ -156,4 +156,4 @@ docker-compose.yml         Local PostgreSQL and API
 AGENTS.MD                  Product specification and phase gates
 ```
 
-[Ledger](docs/ledger.md) · [API](docs/api.md) · [Verification](docs/verification.md) · [Design review](docs/design-review.md) · [Artwork notes](docs/design-assets.md)
+[Ledger](docs/ledger.md) · [API](docs/api.md) · [App lock](docs/app-lock.md) · [Verification](docs/verification.md) · [Design review](docs/design-review.md) · [Artwork notes](docs/design-assets.md)

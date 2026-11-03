@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/preferences.dart';
 import '../../core/platform.dart';
 import '../../core/providers.dart';
+import '../../core/strings_auth.dart';
 import '../../core/strings_banking.dart';
 import '../../design/components/browse_components.dart';
 import '../../design/components/buttons.dart';
@@ -95,6 +96,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     email: user.email,
                   ),
                   const SizedBox(height: TetriSpace.x32),
+                  SecondaryButton(
+                    label: session.pinEnabled
+                        ? AuthStrings.changeAppPin
+                        : AuthStrings.setAppPin,
+                    onPressed: _busy
+                        ? null
+                        : () => context.push(
+                            session.pinEnabled ? '/change-pin' : '/pin-setup',
+                          ),
+                  ),
+                  const SizedBox(height: TetriSpace.x16),
                   TetriSwitch(
                     label: BankingStrings.biometricUnlock,
                     value: session.biometricsEnabled,

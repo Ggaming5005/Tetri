@@ -7,10 +7,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tetri/core/api.dart';
 import 'package:tetri/core/api_error.dart';
+import 'package:tetri/core/app_pin.dart';
 import 'package:tetri/core/providers.dart';
 import 'package:tetri/core/session.dart';
 import 'package:tetri/core/strings.dart';
 import 'package:tetri/core/strings_auth.dart';
+import 'package:tetri/core/strings_pin.dart';
+import 'package:tetri/design/components/buttons.dart';
+import 'package:tetri/design/components/confirmation_dialog.dart';
+import 'package:tetri/design/components/pin_input.dart';
 import 'package:tetri/design/components/skeleton.dart';
 import 'package:tetri/design/theme.dart';
 import 'package:tetri/features/auth/auth_screens.dart';
@@ -25,11 +30,19 @@ void main() {
   setUp(() {
     api = MockApi();
     session = MockSession();
+    when(() => session.pinEnabled).thenReturn(true);
+    when(() => session.biometricsEnabled).thenReturn(true);
+    when(() => session.resetLocalSession()).thenAnswer((_) async {});
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  Future<void> pump(WidgetTester tester, Widget screen) async {
-    tester.view.physicalSize = const Size(360, 800);
+  Future<void> pump(
+    WidgetTester tester,
+    Widget screen, {
+    Size size = const Size(360, 800),
+    TextScaler textScaler = TextScaler.noScaling,
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -39,7 +52,14 @@ void main() {
           bankApiProvider.overrideWithValue(api),
           sessionProvider.overrideWithValue(session),
         ],
-        child: MaterialApp(theme: TetriTheme.light, home: screen),
+        child: MaterialApp(
+          theme: TetriTheme.light,
+          home: screen,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: child!,
+          ),
+        ),
       ),
     );
     await tester.pump();
@@ -169,10 +189,165 @@ void main() {
   ) async {
     when(() => session.unlock()).thenAnswer((_) async => false);
     await pump(tester, const LockScreen());
-    await tester.tap(find.text(AuthStrings.unlock));
+    await tester.tap(find.text(AuthStrings.useBiometrics));
     await tester.pump();
     expect(find.text(AuthStrings.unlockCancelled), findsOneWidget);
     expect(find.text(AuthStrings.unlock), findsOneWidget);
     verify(() => session.unlock()).called(1);
   });
+
+  testWidgets('PIN unlock requires an explicit tap after four digits', (
+    tester,
+  ) async {
+    final pending = Completer<bool>();
+    when(() => session.unlockWithPin('0572')).thenAnswer((_) => pending.future);
+    await pump(tester, const LockScreen());
+    expect(find.byType(PinInput), findsOneWidget);
+    expect(
+      tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
+      isNull,
+    );
+    await tester.enterText(find.byType(TextField), '057');
+    await tester.pump();
+    expect(
+      tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
+      isNull,
+    );
+    await tester.enterText(find.byType(TextField), '0572');
+    await tester.pump();
+    verifyNever(() => session.unlockWithPin(any()));
+    await tester.tap(find.text(AuthStrings.unlock));
+    await tester.pump();
+    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
+    await tester.tap(find.text(AuthStrings.useBiometrics));
+    verifyNever(() => session.unlock());
+    pending.complete(true);
+    await tester.pump();
+    verify(() => session.unlockWithPin('0572')).called(1);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '',
+    );
+  });
+
+  testWidgets('incorrect PIN stays masked, clears input and explains retry', (
+    tester,
+  ) async {
+    when(() => session.unlockWithPin(any()))
+        .thenThrow(const PinException(PinStrings.incorrect));
+    await pump(tester, const LockScreen());
+    await tester.enterText(find.byType(TextField), '0582');
+    await tester.pump();
+    await tester.tap(find.text(AuthStrings.unlock));
+    await tester.pump();
+    expect(find.text(PinStrings.incorrect), findsOneWidget);
+    expect(find.byType(LockScreen), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '',
+    );
+    verifyNever(() => session.resetLocalSession());
+  });
+
+  testWidgets('PIN cooldown disables retry while biometrics stays available', (
+    tester,
+  ) async {
+    when(() => session.unlockWithPin(any())).thenThrow(
+      PinException(
+        PinStrings.cooldown,
+        retryAt: DateTime.now().add(const Duration(seconds: 30)),
+      ),
+    );
+    await pump(tester, const LockScreen());
+    await tester.enterText(find.byType(TextField), '0582');
+    await tester.pump();
+    await tester.tap(find.text(AuthStrings.unlock));
+    await tester.pump();
+    expect(find.text(PinStrings.cooldown), findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
+    expect(
+      tester.widget<SecondaryButton>(find.byType(SecondaryButton)).onPressed,
+      isNotNull,
+    );
+    await tester.pump(const Duration(seconds: 31));
+    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isTrue);
+    expect(find.text(PinStrings.cooldown), findsNothing);
+  });
+
+  testWidgets('PIN-only unlock hides the unavailable biometric action', (
+    tester,
+  ) async {
+    when(() => session.biometricsEnabled).thenReturn(false);
+    await pump(tester, const LockScreen());
+    expect(find.byType(PinInput), findsOneWidget);
+    expect(find.text(AuthStrings.useBiometrics), findsNothing);
+  });
+
+  testWidgets(
+    'forgotten PIN requires confirmation before clearing local sign-in',
+    (tester) async {
+      await pump(tester, const LockScreen());
+      await tester.tap(find.text(AuthStrings.forgotPin));
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfirmationDialog), findsOneWidget);
+      expect(find.text(AuthStrings.resetPinHint), findsOneWidget);
+      verifyNever(() => session.resetLocalSession());
+      await tester.tap(find.text(AuthStrings.cancel));
+      await tester.pumpAndSettle();
+      verifyNever(() => session.resetLocalSession());
+      await tester.tap(find.text(AuthStrings.forgotPin));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AuthStrings.signIn));
+      await tester.pumpAndSettle();
+      verify(() => session.resetLocalSession()).called(1);
+      verifyNever(() => session.signOut());
+    },
+  );
+
+  testWidgets(
+    'startup storage failure offers local reset without reading a session',
+    (tester) async {
+      when(() => session.error).thenReturn(
+        const ApiError(
+          code: 'secure_storage',
+          message: PinStrings.corruptRecord,
+        ),
+      );
+      await pump(tester, const StartupScreen());
+      await tester.tap(find.text(AuthStrings.signInInstead));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(AuthStrings.signIn));
+      await tester.pumpAndSettle();
+      verify(() => session.resetLocalSession()).called(1);
+      verifyNever(() => session.initialize());
+      verifyNever(() => session.signOut());
+    },
+  );
+
+  testWidgets(
+    'PIN unlock remains reachable on a small phone above the keyboard',
+    (tester) async {
+      when(() => session.unlockWithPin(any())).thenAnswer((_) async => true);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      addTearDown(tester.view.resetViewInsets);
+      await pump(
+        tester,
+        const LockScreen(),
+        size: const Size(320, 568),
+        textScaler: const TextScaler.linear(2),
+      );
+      await tester.ensureVisible(find.byType(TextField));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '0572');
+      // Finish the field's keyboard/caret reveal before scrolling to Unlock.
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text(AuthStrings.unlock));
+      await tester.pumpAndSettle();
+      expect(find.text(AuthStrings.unlock).hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text(AuthStrings.unlock));
+      await tester.pump();
+      verify(() => session.unlockWithPin('0572')).called(1);
+    },
+  );
 }

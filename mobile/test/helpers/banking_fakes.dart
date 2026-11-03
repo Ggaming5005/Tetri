@@ -131,6 +131,8 @@ Future<void> pumpBanking(
         '/payments',
         '/activity',
         '/settings',
+        '/change-pin',
+        '/pin-setup',
         '/send',
         '/convert',
         '/accounts/:id',

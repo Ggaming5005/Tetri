@@ -17,6 +17,7 @@ import '../features/accounts/account_screen.dart';
 import '../features/activity/activity_screen.dart';
 import '../features/activity/transaction_detail_screen.dart';
 import '../features/auth/auth_screens.dart';
+import '../features/auth/pin_setup_screen.dart';
 import '../features/convert/convert_screen.dart';
 import '../features/home/banking_providers.dart';
 import '../features/home/home_screen.dart';
@@ -36,6 +37,7 @@ class _TetriAppState extends ConsumerState<TetriApp>
   late final session = ref.read(sessionProvider);
   String? _previousUserId;
   SessionStatus? _previousStatus;
+  final _lockNavigatorKey = GlobalKey<NavigatorState>();
 
   late final router = GoRouter(
     initialLocation: kDebugMode && const bool.fromEnvironment('TETRI_GALLERY')
@@ -58,12 +60,16 @@ class _TetriAppState extends ConsumerState<TetriApp>
         if (const ['/', '/sign-in', '/sign-up'].contains(path)) return null;
         return path == '/starting' ? '/' : '/sign-in';
       }
+      if (session.shouldSetUpPin) {
+        return path == '/pin-setup' ? null : '/pin-setup';
+      }
       if (const [
         '/',
         '/starting',
         '/lock',
         '/sign-in',
         '/sign-up',
+        '/pin-setup',
       ].contains(path)) {
         return session.shouldOfferBiometrics ? '/biometrics' : '/home';
       }
@@ -74,7 +80,10 @@ class _TetriAppState extends ConsumerState<TetriApp>
       _route('/starting', (_) => const StartupScreen()),
       _route('/sign-in', (_) => const SignInScreen()),
       _route('/sign-up', (_) => const SignUpScreen()),
-      _route('/lock', (_) => const LockScreen()),
+      // The visible lock host below owns its own input/dialog overlay.
+      _route('/lock', (_) => const SizedBox.shrink()),
+      _route('/pin-setup', (_) => const PinSetupScreen()),
+      _route('/change-pin', (_) => const PinSetupScreen(changing: true)),
       _route('/biometrics', (_) => const BiometricsOfferScreen()),
       _route('/home', (_) => const HomeScreen()),
       _route('/payments', (_) => const PaymentsScreen()),
@@ -159,12 +168,17 @@ class _TetriAppState extends ConsumerState<TetriApp>
 
   @override
   Future<bool> didPopRoute() async {
-    if (session.status == SessionStatus.locked) return true;
     if (WidgetsBinding.instance.platformDispatcher.views.any(
       (view) => view.viewInsets.bottom > 0,
     )) {
       FocusManager.instance.primaryFocus?.unfocus();
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+      return true;
+    }
+    if (session.status == SessionStatus.locked) {
+      if (_lockNavigatorKey.currentState?.canPop() == true) {
+        await _lockNavigatorKey.currentState!.maybePop();
+      }
       return true;
     }
     return false;
@@ -230,7 +244,13 @@ class _TetriAppState extends ConsumerState<TetriApp>
                             child: TickerMode(enabled: !locked, child: child!),
                           ),
                         ),
-                        if (locked) const LockScreen(),
+                        if (locked)
+                          Navigator(
+                            key: _lockNavigatorKey,
+                            onGenerateRoute: (_) => MaterialPageRoute<void>(
+                              builder: (_) => const LockScreen(),
+                            ),
+                          ),
                       ],
                     ),
                   ),

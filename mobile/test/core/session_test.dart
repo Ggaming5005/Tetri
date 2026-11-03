@@ -8,9 +8,260 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tetri/core/api.dart';
 import 'package:tetri/core/api_error.dart';
 import 'package:tetri/core/api_models.dart';
+import 'package:tetri/core/app_pin.dart';
 import 'package:tetri/core/session.dart';
 
+import '../helpers/pin_fakes.dart';
+
 void main() {
+  test('session expiry during biometric persistence cannot restore its preference', () async {
+    final fixture = Fixture(
+      (request) async => jsonResponse(401, {
+        'code': request.path == '/auth/refresh'
+            ? 'refresh_invalid'
+            : 'unauthorized',
+      }),
+    );
+    await fixture.initialize();
+    final started = Completer<void>(), release = Completer<void>();
+    fixture.store.beforeBiometricsWrite = (enabled) async {
+      if (enabled) {
+        started.complete();
+        await release.future;
+      }
+    };
+    final setting = expectLater(
+      fixture.session.setBiometrics(true),
+      throwsA(
+        isA<ApiError>().having((error) => error.code, 'code', 'signed_out'),
+      ),
+    );
+    await started.future;
+    final request = expectLater(
+      fixture.api.accounts(),
+      throwsA(isA<ApiError>()),
+    );
+    // Cleanup changes authorization immediately, then waits for the admitted
+    // preference write. Release that write only after the session has expired.
+    while (fixture.session.status != SessionStatus.signedOut) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    release.complete();
+    await Future.wait([setting, request]);
+    expect(fixture.session.status, SessionStatus.signedOut);
+    expect(fixture.session.biometricsEnabled, isFalse);
+    expect(fixture.store.biometrics, isFalse);
+    expect(fixture.store.session, isNull);
+  });
+
+  test(
+    'session expiry during PIN creation cannot publish a stale PIN flag',
+    () async {
+      final fixture = Fixture(
+        (request) async => jsonResponse(401, {
+          'code': request.path == '/auth/refresh'
+              ? 'refresh_invalid'
+              : 'unauthorized',
+        }),
+      );
+      await fixture.initialize();
+      final started = Completer<void>(), release = Completer<void>();
+      final signedOut = Completer<void>();
+      fixture.session.addListener(() {
+        if (fixture.session.status == SessionStatus.signedOut &&
+            !signedOut.isCompleted) {
+          signedOut.complete();
+        }
+      });
+      fixture.pinStore.beforeWrite = () async {
+        started.complete();
+        await release.future;
+      };
+      final setup = expectLater(
+        fixture.session.setPin('1234'),
+        throwsA(isA<ApiError>()),
+      );
+      await started.future;
+      final request = expectLater(
+        fixture.api.accounts(),
+        throwsA(isA<ApiError>()),
+      );
+      // _clear publishes signed-out state after queued storage cleanup; observe
+      // the refresh response before releasing the pending PIN write instead.
+      while (fixture.session.status != SessionStatus.signedOut) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      release.complete();
+      await Future.wait([setup, request, signedOut.future]);
+      expect(fixture.session.pinEnabled, isFalse);
+      expect(fixture.session.status, SessionStatus.signedOut);
+      expect(await fixture.pin.isEnabled(), isFalse);
+    },
+  );
+
+  test('PIN restore reads no tokens before a correct PIN', () async {
+    final fixture = Fixture((_) async => jsonResponse(200, accountJson));
+    await fixture.pin.create('0007');
+    await fixture.initialize();
+    expect(fixture.session.pinEnabled, isTrue);
+    expect(fixture.session.status, SessionStatus.locked);
+    expect(fixture.store.reads, 0);
+    await expectLater(
+      fixture.session.unlockWithPin('9999'),
+      throwsA(isA<PinException>()),
+    );
+    expect(fixture.store.reads, 0);
+    expect(fixture.session.user, isNull);
+    expect(await fixture.session.unlockWithPin('0007'), isTrue);
+    expect(fixture.store.reads, 1);
+    expect(fixture.session.user?.id, sampleUser.id);
+    fixture.session.lock();
+    expect(fixture.session.status, SessionStatus.locked);
+  });
+
+  test(
+    'backgrounding during PIN verification cannot unlock or read tokens',
+    () async {
+      final fixture = Fixture((_) async => jsonResponse(200, accountJson));
+      await fixture.pin.create('1234');
+      await fixture.initialize();
+      final started = Completer<void>(), release = Completer<void>();
+      fixture.pinDeriver.beforeDerive = () async {
+        started.complete();
+        await release.future;
+      };
+      final unlock = fixture.session.unlockWithPin('1234');
+      await started.future;
+      expect(await fixture.session.unlockWithPin('1234'), isFalse);
+      fixture.session.lock();
+      release.complete();
+      expect(await unlock, isFalse);
+      expect(fixture.session.status, SessionStatus.locked);
+      expect(fixture.store.reads, 0);
+    },
+  );
+
+  test(
+    'fingerprint remains available after repeated incorrect PIN attempts',
+    () async {
+      final fixture = Fixture((_) async => jsonResponse(200, accountJson));
+      fixture.store.biometrics = true;
+      await fixture.pin.create('1234');
+      await fixture.initialize();
+      for (var attempt = 0; attempt < 5; attempt++) {
+        await expectLater(
+          fixture.session.unlockWithPin('9999'),
+          throwsA(isA<PinException>()),
+        );
+      }
+      await expectLater(
+        fixture.session.unlockWithPin('1234'),
+        throwsA(isA<PinException>()),
+      );
+      expect(fixture.store.reads, 0);
+      expect(await fixture.session.unlock(), isTrue);
+      fixture.session.lock();
+      expect(await fixture.session.unlockWithPin('1234'), isTrue);
+    },
+  );
+
+  test(
+    'forgotten PIN clears local credentials without reading locked tokens',
+    () async {
+      final fixture = Fixture(
+        (_) async => throw StateError('No request expected'),
+      );
+      fixture.store.biometrics = true;
+      await fixture.pin.create('1234');
+      await fixture.initialize();
+      await fixture.session.resetLocalSession();
+      expect(fixture.store.reads, 0);
+      expect(fixture.store.session, isNull);
+      expect(await fixture.pin.isEnabled(), isFalse);
+      expect(fixture.session.biometricsEnabled, isFalse);
+      expect(fixture.session.status, SessionStatus.signedOut);
+    },
+  );
+
+  test(
+    'changing a PIN requires the current PIN and keeps the old PIN on failure',
+    () async {
+      final fixture = Fixture((_) async => jsonResponse(200, accountJson));
+      await fixture.initialize();
+      expect(fixture.session.shouldSetUpPin, isTrue);
+      await fixture.session.setPin('1234');
+      expect(fixture.session.shouldSetUpPin, isFalse);
+      await expectLater(
+        fixture.session.setPin('4567', currentPin: '9999'),
+        throwsA(isA<PinException>()),
+      );
+      await fixture.pin.verify('1234');
+      await fixture.session.setPin('4567', currentPin: '1234');
+      fixture.session.lock();
+      await expectLater(
+        fixture.session.unlockWithPin('1234'),
+        throwsA(isA<PinException>()),
+      );
+      expect(await fixture.session.unlockWithPin('4567'), isTrue);
+    },
+  );
+
+  test(
+    'backgrounding during first PIN persistence leaves the new PIN locked',
+    () async {
+      final fixture = Fixture((_) async => jsonResponse(200, accountJson));
+      await fixture.initialize();
+      final started = Completer<void>(), release = Completer<void>();
+      fixture.pinStore.beforeWrite = () async {
+        started.complete();
+        await release.future;
+      };
+      final setup = expectLater(
+        fixture.session.setPin('1234'),
+        throwsA(isA<ApiError>()),
+      );
+      await started.future;
+      fixture.session.lock();
+      release.complete();
+      await setup;
+      expect(fixture.session.pinEnabled, isTrue);
+      expect(fixture.session.status, SessionStatus.locked);
+      fixture.pinStore.beforeWrite = null;
+      expect(await fixture.session.unlockWithPin('1234'), isTrue);
+    },
+  );
+
+  test(
+    'new login discards old local PIN and asks for new enrollment',
+    () async {
+      final fixture = Fixture(
+        (_) async => jsonResponse(200, replacement.toJson()),
+      );
+      await fixture.pin.create('1234');
+      fixture.store.biometrics = true;
+      await fixture.initialize();
+      await fixture.session.signIn(
+        email: sampleUser.email,
+        password: 'password-123',
+      );
+      expect(await fixture.pin.isEnabled(), isFalse);
+      expect(fixture.session.biometricsEnabled, isFalse);
+      expect(fixture.session.shouldSetUpPin, isTrue);
+      expect(fixture.store.session?.refreshToken, 'new-refresh');
+    },
+  );
+
+  test('damaged PIN storage cannot silently restore a saved session', () async {
+    final fixture = Fixture((_) async => jsonResponse(200, accountJson));
+    fixture.pinStore.value = '{invalid';
+    await fixture.initialize();
+    expect(fixture.session.status, SessionStatus.restoring);
+    expect(fixture.session.error?.code, 'secure_storage');
+    expect(fixture.store.reads, 0);
+    await fixture.session.resetLocalSession();
+    expect(fixture.session.status, SessionStatus.signedOut);
+  });
+
   test('three simultaneous 401s rotate once and persist before any request retries', () async {
     final allOldRequests = Completer<void>();
     final rotationStarted = Completer<void>();
@@ -485,10 +736,12 @@ class MemoryStore implements SessionStore {
   bool biometrics = false, offerSeen = false;
   int reads = 0, deletes = 0;
   Future<void> Function()? beforeWrite;
+  Future<void> Function(bool enabled)? beforeBiometricsWrite;
   @override
   Future<bool> readBiometricsEnabled() async => biometrics;
   @override
   Future<void> writeBiometricsEnabled(bool value) async {
+    await beforeBiometricsWrite?.call(value);
     biometrics = value;
   }
 
@@ -533,6 +786,7 @@ class Fixture {
       dio: dio,
       store: store,
       biometrics: gate,
+      pin: pin,
       delay: (duration) async {
         delays.add(duration);
       },
@@ -546,6 +800,9 @@ class Fixture {
   final dio = Dio(BaseOptions(baseUrl: 'https://tetri.example/api/v1'));
   final store = MemoryStore();
   final gate = FakeBiometrics();
+  final pinStore = MemoryPinStore();
+  final pinDeriver = FakePinDeriver();
+  late final pin = AppPinController(store: pinStore, deriver: pinDeriver);
   final delays = <Duration>[];
   late final SessionController session;
   late final BankApi api;

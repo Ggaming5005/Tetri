@@ -8,6 +8,7 @@ import 'package:local_auth/local_auth.dart';
 
 import 'api_error.dart';
 import 'api_models.dart';
+import 'app_pin.dart';
 import 'strings_core.dart';
 
 enum SessionStatus { restoring, signedOut, locked, signedIn }
@@ -82,8 +83,15 @@ class SessionController extends ChangeNotifier {
     required this._dio,
     required this._store,
     required this._biometrics,
+    AppPinController? pin,
     Future<void> Function(Duration)? delay,
-  }) : _delay = delay ?? Future<void>.delayed {
+  }) : _pin =
+           pin ??
+           AppPinController(
+             store: SecureAppPinStore(),
+             deriver: DevicePinDeriver(),
+           ),
+       _delay = delay ?? Future<void>.delayed {
     _interceptor = InterceptorsWrapper(
       onRequest: _onRequest,
       onResponse: (response, handler) {
@@ -101,14 +109,18 @@ class SessionController extends ChangeNotifier {
   final Dio _dio;
   final SessionStore _store;
   final BiometricGate _biometrics;
+  final AppPinController _pin;
   final Future<void> Function(Duration) _delay;
   late final Interceptor _interceptor;
   SessionStatus _status = SessionStatus.restoring;
   SessionData? _session;
   ApiError? _error;
   bool _biometricsEnabled = false,
+      _pinEnabled = false,
       _offerSeen = false,
       _busy = false,
+      _settingPin = false,
+      _lockAfterPinSetup = false,
       _disposed = false;
   int _generation = 0, _authorizationEpoch = 0;
   Future<SessionData>? _refresh;
@@ -120,6 +132,8 @@ class SessionController extends ChangeNotifier {
   ApiError? get error => _error;
   bool get busy => _busy;
   bool get biometricsEnabled => _biometricsEnabled;
+  bool get pinEnabled => _pinEnabled;
+  bool get shouldSetUpPin => status == SessionStatus.signedIn && !pinEnabled;
   bool get shouldOfferBiometrics =>
       _status == SessionStatus.signedIn && !_biometricsEnabled && !_offerSeen;
 
@@ -157,7 +171,8 @@ class SessionController extends ChangeNotifier {
     try {
       _biometricsEnabled = await _store.readBiometricsEnabled();
       _offerSeen = await _store.readBiometricsOfferSeen();
-      if (_biometricsEnabled) {
+      _pinEnabled = await _pin.isEnabled();
+      if (_biometricsEnabled || _pinEnabled) {
         _session = null;
         _status = SessionStatus.locked;
       } else {
@@ -176,7 +191,7 @@ class SessionController extends ChangeNotifier {
     }
   }
 
-  Future<void> _restore() async {
+  Future<void> _restore({int? authorizationEpoch}) async {
     final pending = _refresh;
     if (pending != null) {
       try {
@@ -185,9 +200,17 @@ class SessionController extends ChangeNotifier {
         /* Its outcome is handled by refresh. */
       }
     }
+    if (authorizationEpoch != null &&
+        authorizationEpoch != _authorizationEpoch) {
+      return;
+    }
     final generation = _generation;
     final session = await _store.readSession();
-    if (generation != _generation) return;
+    if (generation != _generation ||
+        (authorizationEpoch != null &&
+            authorizationEpoch != _authorizationEpoch)) {
+      return;
+    }
     _session = session;
     _status = session == null
         ? SessionStatus.signedOut
@@ -224,8 +247,18 @@ class SessionController extends ChangeNotifier {
     try {
       final response = await _dio.post<dynamic>(path, data: body);
       final session = SessionData.fromJson(response.data as Json);
+      // A new account login must never inherit another account's local PIN.
+      // Remove the old tokens before removing their unlock requirements.
+      await _serializeWrite(() async {
+        if (generation != _generation) throw _unavailable;
+        await _store.deleteSession();
+        await _pin.clear();
+        await _store.writeBiometricsEnabled(false);
+      });
       await _save(session, generation);
       if (generation != _generation) throw _unavailable;
+      _pinEnabled = false;
+      _biometricsEnabled = false;
       _session = session;
       _status = SessionStatus.signedIn;
     } catch (error) {
@@ -260,7 +293,9 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<bool> unlock() async {
-    if (_busy || _status != SessionStatus.locked) return false;
+    if (_busy || !_biometricsEnabled || _status != SessionStatus.locked) {
+      return false;
+    }
     _busy = true;
     _error = null;
     final epoch = _authorizationEpoch;
@@ -274,7 +309,9 @@ class SessionController extends ChangeNotifier {
         return false;
       }
       if (epoch != _authorizationEpoch) return false;
-      await _restore();
+      await _pin.resetAttempts();
+      if (epoch != _authorizationEpoch) return false;
+      await _restore(authorizationEpoch: epoch);
       return _status == SessionStatus.signedIn;
     } catch (_) {
       _error = const ApiError(
@@ -288,6 +325,63 @@ class SessionController extends ChangeNotifier {
     }
   }
 
+  Future<bool> unlockWithPin(String pin) async {
+    if (_busy || !_pinEnabled || _status != SessionStatus.locked) return false;
+    _busy = true;
+    _error = null;
+    final epoch = _authorizationEpoch;
+    _notify();
+    try {
+      await _pin.verify(pin);
+      if (epoch != _authorizationEpoch) return false;
+      await _restore(authorizationEpoch: epoch);
+      return _status == SessionStatus.signedIn;
+    } finally {
+      _busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> setPin(String pin, {String? currentPin}) async {
+    if (_busy || _status != SessionStatus.signedIn) throw _unavailable;
+    _busy = true;
+    _settingPin = true;
+    final generation = _generation;
+    final epoch = _authorizationEpoch;
+    _notify();
+    try {
+      if (_pinEnabled) {
+        await _pin.verify(currentPin ?? '');
+      }
+      await _serializeWrite(() async {
+        if (generation != _generation ||
+            epoch != _authorizationEpoch ||
+            _status != SessionStatus.signedIn) {
+          throw _unavailable;
+        }
+        await _pin.create(pin);
+        if (generation != _generation) throw _unavailable;
+        _pinEnabled = true;
+        if (_lockAfterPinSetup) lock();
+      });
+      if (generation != _generation ||
+          epoch != _authorizationEpoch ||
+          _status != SessionStatus.signedIn) {
+        throw _unavailable;
+      }
+    } finally {
+      _settingPin = false;
+      _lockAfterPinSetup = false;
+      _busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> resetLocalSession() async {
+    if (_busy) throw _unavailable;
+    await _clear();
+  }
+
   Future<void> setBiometrics(bool enabled) async {
     if (_status != SessionStatus.signedIn) throw _unavailable;
     final generation = _generation;
@@ -298,13 +392,18 @@ class SessionController extends ChangeNotifier {
         message: CoreStrings.biometricsUnavailable,
       );
     }
-    if (generation != _generation || _status != SessionStatus.signedIn) {
-      throw _unavailable;
-    }
-    await _store.writeBiometricsEnabled(enabled);
-    await _store.writeBiometricsOfferSeen(true);
-    _biometricsEnabled = enabled;
-    _offerSeen = true;
+    await _serializeWrite(() async {
+      if (generation != _generation || _status != SessionStatus.signedIn) {
+        throw _unavailable;
+      }
+      await _store.writeBiometricsEnabled(enabled);
+      await _store.writeBiometricsOfferSeen(true);
+      if (generation != _generation) throw _unavailable;
+      // A write already authorized before a warm lock may finish, but cannot
+      // restore a preference after this session has been cleared or replaced.
+      _biometricsEnabled = enabled;
+      _offerSeen = true;
+    });
     _notify();
   }
 
@@ -315,7 +414,16 @@ class SessionController extends ChangeNotifier {
   }
 
   void lock() {
-    if (!_biometricsEnabled || _status != SessionStatus.signedIn) return;
+    if (_settingPin) _lockAfterPinSetup = true;
+    if (_status == SessionStatus.locked) {
+      // A PIN derivation that finishes in the background cannot open the app.
+      _authorizationEpoch++;
+      return;
+    }
+    if ((!_biometricsEnabled && !_pinEnabled) ||
+        _status != SessionStatus.signedIn) {
+      return;
+    }
     _authorizationEpoch++;
     _session = null;
     _status = SessionStatus.locked;
@@ -345,9 +453,11 @@ class SessionController extends ChangeNotifier {
     _authorizationEpoch++;
     _session = null;
     _biometricsEnabled = false;
+    _pinEnabled = false;
     _status = SessionStatus.signedOut;
     await _serializeWrite(() async {
       await _store.deleteSession();
+      await _pin.clear();
       await _store.writeBiometricsEnabled(false);
     });
     _notify();

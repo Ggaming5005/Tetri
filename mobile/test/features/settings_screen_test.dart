@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tetri/core/session.dart';
+import 'package:tetri/core/strings_auth.dart';
 import 'package:tetri/core/strings_banking.dart';
 import 'package:tetri/design/components/selection_controls.dart';
 import 'package:tetri/design/components/browse_components.dart';
@@ -18,11 +19,26 @@ void main() {
     session = MockSession();
     theme = ValueNotifier(ThemeMode.system);
     when(() => session.biometricsEnabled).thenReturn(false);
+    when(() => session.pinEnabled).thenReturn(true);
     when(() => session.biometricsAvailable()).thenAnswer((_) async => true);
     when(() => session.setBiometrics(any())).thenAnswer((_) async {});
     when(() => session.signOut()).thenAnswer((_) async {});
   });
   tearDown(() => theme.dispose());
+
+  testWidgets('settings offers changing the existing app PIN', (tester) async {
+    await pumpBanking(
+      tester,
+      const SettingsScreen(),
+      FakeBankApi(),
+      session: session,
+      themePreference: theme,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AuthStrings.changeAppPin));
+    await tester.pumpAndSettle();
+    expect(find.text('/change-pin'), findsOneWidget);
+  });
 
   testWidgets(
     'settings is a back-navigation detail page outside the bottom tabs',
