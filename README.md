@@ -2,7 +2,7 @@
 
 Tetri is a small multi-currency digital bank built with Flutter and ASP.NET Core. **Sandbox only: no real money.**
 
-Phases 1–3 are verified locally: the ledger, authentication, account history, official exchange rates and quoted conversions. Mobile screens and screenshots arrive in Phases 4–5.
+Phases 1–3 are verified: the ledger, authentication, account history, official exchange rates and quoted conversions. The Flutter design system is in progress; app screens arrive in Phase 5.
 
 ## Try it
 
@@ -112,7 +112,7 @@ AGENTS.MD                  Product specification and phase gates
 ## Phase 3 verification status
 
 - Registration, login, session rotation/logout, handle availability, account/history reads, lookup, rates, quotes and conversions are implemented.
-- The full suite passes 56 unit tests and 129 PostgreSQL integration tests locally, with zero skipped tests. Release build and formatting checks pass with zero warnings/errors. CI verification is in progress.
+- The full suite passes 56 unit tests and 129 PostgreSQL integration tests locally, with zero skipped tests. Release build and formatting checks pass with zero warnings/errors. [Phase 3 CI](https://github.com/Ggaming5005/Tetri/actions/runs/41673814461) passed three consecutive full-suite runs and the Docker Compose check.
 - Docker Compose starts the complete API locally; the health check passes and the development OpenAPI document lists all 16 routes.
 - HTTP tests use real access tokens; rate-limit tests use the production defaults.
 - Refresh retries never extend the original 60-second grace window. If a refresh response is lost and the device remains offline longer than that, the next retry ends that session and requires sign-in.
