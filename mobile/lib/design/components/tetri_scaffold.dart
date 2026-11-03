@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../tokens.dart';
@@ -28,7 +30,11 @@ class TetriScaffold extends StatelessWidget {
           if (title != null)
             SliverPersistentHeader(
               pinned: true,
-              delegate: _TitleHeader(title!, TetriColors.of(context)),
+              delegate: _TitleHeader(
+                title!,
+                TetriColors.of(context),
+                MediaQuery.textScalerOf(context),
+              ),
             ),
           SliverPadding(
             padding: const EdgeInsets.all(TetriSpace.x24),
@@ -41,16 +47,26 @@ class TetriScaffold extends StatelessWidget {
 }
 
 class _TitleHeader extends SliverPersistentHeaderDelegate {
-  _TitleHeader(this.title, this.colors);
+  _TitleHeader(this.title, this.colors, this.textScaler);
 
   final String title;
   final TetriColors colors;
+  final TextScaler textScaler;
+
+  double _lineHeight(TextStyle style) =>
+      textScaler.scale(style.fontSize!) * style.height!;
 
   @override
-  double get minExtent => TetriSizes.button56;
+  double get minExtent => math.max(
+    TetriSizes.button56,
+    _lineHeight(TetriTypography.title) + TetriSpace.x16 * 2,
+  );
 
   @override
-  double get maxExtent => TetriSizes.scaffoldExpandedHeight;
+  double get maxExtent => math.max(
+    TetriSizes.scaffoldExpandedHeight,
+    _lineHeight(TetriTypography.headline) + TetriSpace.x16 * 2 + TetriSpace.x48,
+  );
 
   @override
   Widget build(
@@ -88,5 +104,7 @@ class _TitleHeader extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_TitleHeader oldDelegate) =>
-      title != oldDelegate.title || colors != oldDelegate.colors;
+      title != oldDelegate.title ||
+      colors != oldDelegate.colors ||
+      textScaler != oldDelegate.textScaler;
 }

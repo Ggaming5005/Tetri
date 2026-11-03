@@ -7,6 +7,34 @@ import 'package:tetri/design/tokens.dart';
 import 'package:tetri/design/typography.dart';
 
 void main() {
+  testWidgets('collapsed title reserves enough height for accessibility text', (
+    tester,
+  ) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: TetriTheme.light,
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: TetriScaffold(
+            title: 'Activity',
+            scrollController: controller,
+            child: const SizedBox(height: 1600),
+          ),
+        ),
+      ),
+    );
+    controller.jumpTo(240);
+    await tester.pump();
+    final title = tester.getRect(find.text('Activity'));
+    expect(title.height, greaterThanOrEqualTo(48));
+    expect(title.top, greaterThanOrEqualTo(0));
+    expect(title.bottom, lessThanOrEqualTo(80));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('scaffold respects safe area and 24 point side padding', (
     tester,
   ) async {

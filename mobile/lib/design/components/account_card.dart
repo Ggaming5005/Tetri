@@ -5,6 +5,7 @@ import '../../core/strings.dart';
 import '../tokens.dart';
 import '../typography.dart';
 import 'amount_text.dart';
+import 'currency_flag.dart';
 
 class AccountCard extends StatelessWidget {
   const AccountCard({super.key, required this.account, this.onTap});
@@ -68,20 +69,6 @@ class CurrencyBadge extends StatelessWidget {
   final String currency;
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: SizedBox.square(
-      dimension: TetriSizes.currencyFlag40,
-      child: ClipOval(
-        child: ColoredBox(
-          color: TetriColors.of(context).surfaceRaised,
-          child: Center(
-            child: Text(
-              MoneyFormat.flag(currency),
-              style: TetriTypography.headline,
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) =>
+      ExcludeSemantics(child: CurrencyFlag(currency: currency));
 }

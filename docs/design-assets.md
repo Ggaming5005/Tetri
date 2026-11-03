@@ -1,6 +1,8 @@
 # Original Tetri artwork
 
-`mobile/assets/illustrations/welcome.png` is original artwork generated with the built-in image generation tool for this project. It is a decorative welcome illustration, has a transparent background, and uses no real bank's branding. The Inter files in `mobile/assets/fonts/` are separate Google Fonts assets distributed under the accompanying OFL license.
+`mobile/assets/illustrations/welcome.png` is an unused design exploration generated with the built-in image generation tool. It has a transparent background and uses no real bank's branding, but repeated edits retained shading that does not satisfy the flat design rule. It is kept for provenance and is not bundled in the app.
+
+The app uses its own wordmark and crisp, code-drawn GEL, USD and EUR flag circles. These render consistently across Android and widget golden tests without emoji font dependencies. The Inter files in `mobile/assets/fonts/` are Google Fonts assets distributed under the accompanying OFL license.
 
 Generation prompt:
 

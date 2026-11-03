@@ -2,7 +2,7 @@
 
 Tetri is a small multi-currency digital bank built with Flutter and ASP.NET Core. **Sandbox only: no real money.**
 
-Phases 1–4 are verified: the ledger, authentication, account history, official exchange rates, quoted conversions and Flutter design system. App screens are next in Phase 5.
+Phases 1–4 are verified: the ledger, authentication, account history, official exchange rates, quoted conversions and Flutter design system. Phase 5 screens are implemented; Android acceptance checks are in progress.
 
 ## Try it
 
@@ -86,9 +86,19 @@ flutter test
 flutter run --dart-define=TETRI_GALLERY=true
 ```
 
-The gallery is available only in debug builds at `/__gallery`; long-press the Tetri wordmark to open it from the brand preview. Its theme selector switches between system, light and dark. Interactive previews include loading, disabled, empty, success and failure states. The actual banking screens are added in Phase 5.
+The gallery is available only in debug builds at `/__gallery`; long-press the Tetri wordmark on Welcome to open it. Its theme selector switches between system, light and dark. Interactive previews include loading, disabled, empty, success and failure states.
 
-Inter and the original welcome artwork are bundled, so rendering does not require a font or image download. [Artwork provenance and prompts](docs/design-assets.md) are recorded with the project. The icon dependency is `phosphor_glyphs`: it preserves the chosen Phosphor outline set while supporting the latest Flutter's final `IconData` class. The older `phosphor_flutter` and `lucide_icons` packages named in the original spec do not compile with this SDK.
+Run the banking app on an Android emulator with `flutter run`. Its default local API URL is `http://10.0.2.2:5080/api/v1`. For a phone connected by USB, enable USB debugging, accept the debugging prompt, and use:
+
+```powershell
+adb devices
+adb -s <device-id> reverse tcp:5080 tcp:5080
+flutter run -d <device-id> --dart-define=TETRI_API_URL=http://127.0.0.1:5080/api/v1
+```
+
+The API must still be running through Docker Compose. Local HTTP is permitted only by the Android debug manifest. Tokens stay in secure storage; biometric unlock reads the saved session only after authentication. A warm lock covers the existing screen so an unresolved payment retains its confirmation key.
+
+Inter and the Phosphor icon font are bundled; flag circles are drawn locally, so rendering does not require a font or image download. [Artwork explorations and prompts](docs/design-assets.md) are recorded with the project; shaded bitmap candidates are not included in the app. The icon dependency is `phosphor_glyphs`: it preserves the chosen Phosphor outline set while supporting the latest Flutter's final `IconData` class. The older `phosphor_flutter` and `lucide_icons` packages named in the original spec do not compile with this SDK.
 
 ## Project structure
 
@@ -103,7 +113,7 @@ backend/
     Tetri.UnitTests/        Money and request hashing tests
     Tetri.IntegrationTests/ PostgreSQL constraints, ledger races and API tests
 .github/workflows/ci.yml    Backend build, tests and Compose smoke check
-mobile/                    Flutter design system, component gallery and widget tests
+mobile/                    Flutter app, design system, API client and tests
 docker-compose.yml         Local PostgreSQL and API
 AGENTS.MD                  Product specification and phase gates
 ```
@@ -137,3 +147,10 @@ AGENTS.MD                  Product specification and phase gates
 - 113 tests cover components, 38 required contrast pairs, extra state/avatar contrast, minor-unit formatting, keypad boundaries, reduced motion and a small-phone gallery in both themes.
 - The debug APK builds and runs on an Android API 36 emulator at 360 dp width. Light and dark gallery screens and transfer review sheets were visually checked; captures are in `docs/screenshots/`.
 - Both jobs passed in [Phase 4 CI](https://github.com/Ggaming5005/Tetri/actions/runs/41677108152): all 113 Flutter tests, analysis with zero issues, and three consecutive runs of all 185 backend tests plus the Compose smoke check.
+
+## Phase 5 verification status
+
+- Welcome, stepped sign-up, sign-in, biometric lock, Home, account history, Send, Convert, Activity, transaction detail and Settings are wired to the API.
+- All 208 Flutter tests pass locally, including simultaneous token refresh, refresh failure handling, payment retry keys, expired quote review, background lock state, and Home/Send review goldens in both themes. Analysis reports zero issues; the debug APK builds.
+- On the Android emulator, a new user registered with the specified starter balances and sent 25.00 GEL to a second user. Activity shows the transfer, and API reads verify sender/recipient GEL balances of 975.00/1,025.00.
+- Physical-device verification and Phase 5 CI are pending. Live conversion currently returns `rates_unavailable`: the undated NBG feed supplied rates effective 4 November 2026, which the fresh local database correctly refuses to use before that UTC date. The conversion controller and real PostgreSQL API tests pass with controlled fixtures. Phase 6 has not started.
