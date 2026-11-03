@@ -2,7 +2,7 @@
 
 Tetri is a small multi-currency digital bank built with Flutter and ASP.NET Core. **Sandbox only: no real money.**
 
-The project is currently in Phase 1: backend foundation. Mobile screens and screenshots arrive in Phases 4–5.
+Phase 1, the backend foundation, is verified. Phase 2 adds ledger posting and transfers. Mobile screens and screenshots arrive in Phases 4–5.
 
 ## Try it
 
@@ -97,6 +97,6 @@ AGENTS.MD                  Product specification and phase gates
 - Release build: passes with zero warnings and zero errors.
 - Local PostgreSQL tests: blocked because the Docker engine requires WSL installation. Docker Desktop is installed; Windows administrator approval is still needed for `wsl --install --no-distribution`.
 - PostgreSQL tests on the CI Docker host: all 27 pass, with zero skipped tests.
-- Docker Compose health: verification in progress.
-- GitHub CI: verification in progress.
-- Later phases have not started.
+- Docker Compose startup and HTTP health: pass on the CI Docker host.
+- GitHub CI: [Phase 1 verification passed](https://github.com/Ggaming5005/Tetri/actions/runs/41667540405).
+- Phase 2 begins after these checks; no ledger posting endpoint is included in this foundation revision.
