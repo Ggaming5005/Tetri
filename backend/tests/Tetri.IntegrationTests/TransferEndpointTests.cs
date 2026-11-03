@@ -200,6 +200,10 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
     [Theory]
     [InlineData("{\"recipientHandle\":\"@nino\",\"amount\":{\"minor\":1.5,\"currency\":\"GEL\"}}")]
     [InlineData("{\"recipientHandle\":\"@nino\",\"amount\":{\"minor\":9223372036854775808,\"currency\":\"GEL\"}}")]
+    [InlineData("{\"recipientHandle\":\"@nino\",\"amount\":{\"minor\":100,\"minor\":200,\"currency\":\"GEL\"}}")]
+    [InlineData("{\"recipientHandle\":\"@nino\",\"amount\":{\"minor\":100,\"Minor\":200,\"currency\":\"GEL\"}}")]
+    [InlineData("{\"recipientHandle\":\"@nino\",\"amount\":{\"Minor\":200,\"minor\":100,\"currency\":\"GEL\"}}")]
+    [InlineData("{\"recipientHandle\":\"@nino\",\"amount\":{\"minor\":\"2500\",\"currency\":\"GEL\"}}")]
     [InlineData("{\"recipientHandle\":\"\",\"amount\":{\"minor\":100,\"currency\":\"GEL\"}}")]
     [InlineData("{\"recipientHandle\":\"@nino\"}")]
     public async Task Invalid_request_shape_cannot_create_an_idempotency_claim(string json)
@@ -208,12 +212,14 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync();
+        var balanceBefore = await bank.BalanceAsync(sender.Id);
 
         var response = await PostJsonAsync(client, sender.Id, NewKey(), json);
 
         response.Status.Should().Be(HttpStatusCode.BadRequest);
         response.Code.Should().Be("invalid_request");
         await AssertNoClaimOrTransferAsync(bank, sender.Id);
+        (await bank.BalanceAsync(sender.Id)).Should().Be(balanceBefore);
     }
 
     [Fact]

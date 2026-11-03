@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Tetri.Core.Idempotency;
 using Tetri.Core.Ledger;
 using Tetri.Infrastructure.Idempotency;
@@ -9,6 +10,14 @@ namespace Tetri.Api.Endpoints;
 
 public static class TransferEndpoints
 {
+    private static readonly JsonSerializerOptions RequestJson = new(JsonSerializerOptions.Web)
+    {
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        NumberHandling = JsonNumberHandling.Strict,
+        RespectRequiredConstructorParameters = true
+    };
+
     public static void MapTransferEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/v1/transfers", PostAsync)
@@ -44,9 +53,11 @@ public static class TransferEndpoints
         }
 
         TransferRequest? request;
+        string hash;
         try
         {
-            request = body.Deserialize<TransferRequest>(JsonSerializerOptions.Web);
+            request = body.Deserialize<TransferRequest>(RequestJson);
+            hash = CanonicalJson.Hash(body.GetRawText());
         }
         catch (JsonException)
         {
@@ -68,7 +79,6 @@ public static class TransferEndpoints
             return Problem("unsupported_currency", "Choose GEL, USD or EUR.");
         }
 
-        var hash = CanonicalJson.Hash(body.GetRawText());
         var audit = new AuditContext(context.Connection.RemoteIpAddress?.ToString(), context.Request.Headers.UserAgent);
         var response = await idempotency.ExecuteAsync(
             userId, idempotencyKey.ToString("D"), "/api/v1/transfers", hash,
