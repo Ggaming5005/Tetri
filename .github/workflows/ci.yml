@@ -48,3 +48,24 @@ jobs:
           name: backend-test-results
           path: TestResults/**/*.trx
           if-no-files-found: ignore
+
+  flutter:
+    name: Flutter analysis and widget tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          channel: stable
+          flutter-version: '3.47.9'
+          cache: true
+      - name: Restore Flutter packages
+        run: flutter pub get --enforce-lockfile
+      - name: Analyze
+        run: flutter analyze --fatal-infos
+      - name: Test
+        run: flutter test

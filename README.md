@@ -30,7 +30,8 @@ The concurrency test sends 50 competing HTTP requests against a 100.00 GEL balan
 - PostgreSQL 17, Docker Compose
 - xUnit, FluentAssertions and Testcontainers
 - Serilog and GitHub Actions
-- Planned mobile app: Flutter, Riverpod, go_router and dio
+- Flutter 3.47.9, Riverpod, go_router and dio
+- Bundled Inter, Phosphor outline icons, light/dark semantic themes
 
 The .NET SDK is pinned in `global.json`; NuGet lock files are committed. Docker Compose and tests use PostgreSQL `17.11-alpine`.
 
@@ -75,7 +76,19 @@ dotnet test backend/Tetri.sln --configuration Release --no-build
 
 Tests create isolated PostgreSQL containers; they never use the Compose database. Unit tests cover integer money formatting/parsing, stable canonical request hashing, FX rounding and a saved real NBG response. CI also builds the API container, starts Compose and checks the HTTP health endpoint. EF reads and raw SQL share one connection pool, capped by `Database:MaxPoolSize` (64 by default).
 
-The mobile project will be introduced in Phase 4. Flutter run instructions will be added when that project exists.
+Run the development component gallery on Android with the pinned Flutter version:
+
+```powershell
+cd mobile
+flutter pub get --enforce-lockfile
+flutter analyze --fatal-infos
+flutter test
+flutter run --dart-define=TETRI_GALLERY=true
+```
+
+The gallery is available only in debug builds at `/__gallery`; long-press the Tetri wordmark to open it from the brand preview. Its theme selector switches between system, light and dark. Interactive previews include loading, disabled, empty, success and failure states. The actual banking screens are added in Phase 5.
+
+Inter and the original welcome artwork are bundled, so rendering does not require a font or image download. [Artwork provenance and prompts](docs/design-assets.md) are recorded with the project. The icon dependency is `phosphor_glyphs`: it preserves the chosen Phosphor outline set while supporting the latest Flutter's final `IconData` class. The older `phosphor_flutter` and `lucide_icons` packages named in the original spec do not compile with this SDK.
 
 ## Project structure
 
@@ -90,6 +103,7 @@ backend/
     Tetri.UnitTests/        Money and request hashing tests
     Tetri.IntegrationTests/ PostgreSQL constraints, ledger races and API tests
 .github/workflows/ci.yml    Backend build, tests and Compose smoke check
+mobile/                    Flutter design system, component gallery and widget tests
 docker-compose.yml         Local PostgreSQL and API
 AGENTS.MD                  Product specification and phase gates
 ```
@@ -116,3 +130,9 @@ AGENTS.MD                  Product specification and phase gates
 - Docker Compose starts the complete API locally; the health check passes and the development OpenAPI document lists all 16 routes.
 - HTTP tests use real access tokens; rate-limit tests use the production defaults.
 - Refresh retries never extend the original 60-second grace window. If a refresh response is lost and the device remains offline longer than that, the next retry ends that session and requires sign-in.
+
+## Phase 4 verification status
+
+- All required components, theme tokens and typography are implemented. Local analysis reports zero issues.
+- 113 tests cover components, 38 required contrast pairs, extra state/avatar contrast, minor-unit formatting, keypad boundaries, reduced motion and a small-phone gallery in both themes.
+- Android visual verification and the new Flutter CI job are in progress. Phase 5 has not started.
