@@ -2,19 +2,19 @@
 
 Tetri is a small multi-currency digital bank built with Flutter and ASP.NET Core. **Sandbox only: no real money.**
 
-Phase 1, the backend foundation, is verified. Phase 2 adds ledger posting and transfers. Mobile screens and screenshots arrive in Phases 4–5.
+Phase 1, the backend foundation, is verified. Phase 2 ledger posting and transfers are implemented and undergoing integration verification. Mobile screens and screenshots arrive in Phases 4–5.
 
 ## Try it
 
-The local API is available through the commands below. An APK, hosted demo and demo accounts will be available after the later build phases; this revision does not expose registration or money movement.
+The local API is available through the commands below. An APK, hosted demo and demo accounts will be available after the later build phases. Registration and sign-in arrive in Phase 3; the transfer endpoint currently requires authentication supplied only by the integration-test host.
 
 ## How the money works
 
 The database models a double-entry ledger. Every journal must balance separately in each currency. Amounts and cached account balances use integer minor units, and ledger entries are insert-only. The Phase 1 migration creates this schema and protects entries and audit rows from updates, deletes and truncation.
 
-Phase 2 will implement posting with ordered account row locks inside one PostgreSQL transaction. User balances have a database constraint preventing negative values. Tests will compare each cached balance with its ledger entries.
+Posting takes ordered account row locks inside one PostgreSQL transaction. User balances have a database constraint preventing negative values. Integration tests compare each cached balance with its ledger entries, and an hourly reconciliation checks the same invariants without modifying money.
 
-Transfers and conversions will require idempotency keys. A claim ownership token and locked key row will prevent retries and stale workers from moving money twice. The worked ledger example and detailed posting documentation belong to Phase 2.
+Transfers require idempotency keys. A claim ownership token and locked key row prevent retries and stale workers from moving money twice. Successful responses commit with the money movement, and guarded rejection caching preserves final outcomes. See [the worked ledger example](docs/ledger.md) for the rows written when Giorgi sends 25.00 GEL to Nino. Conversions will use the same machinery in Phase 3.
 
 ## Proof
 
@@ -22,7 +22,7 @@ Transfers and conversions will require idempotency keys. A claim ownership token
 
 Phase 1 tests use PostgreSQL 17 through Testcontainers to verify schema constraints, migration repeatability, immutable ledger/audit tables, seeded system accounts, and healthy/unavailable database responses. Each integration test class also checks ledger invariants before disposing its database.
 
-The Phase 2 concurrency test will send 50 competing requests against a 100.00 GEL balance, requiring exactly ten 10.00 GEL transfers to succeed. It will repeat that scenario twenty times and run alongside deadlock and idempotency takeover tests.
+The concurrency test sends 50 competing HTTP requests against a 100.00 GEL balance, requiring exactly ten 10.00 GEL transfers to succeed. It repeats that scenario twenty times, alongside opposite-direction transfers and deterministic idempotency takeover races; CI runs the entire backend suite three consecutive times.
 
 ## Tech stack
 
@@ -54,7 +54,7 @@ Invoke-RestMethod http://localhost:5080/api/v1/health
 
 The health response is `{"status":"ok","database":"ok"}`. On first startup the API applies the committed migrations after PostgreSQL becomes healthy. Database data persists in the `postgres_data` volume. Ports bind to localhost; `.env` is ignored by Git.
 
-Development OpenAPI is available at [localhost:5080/openapi](http://localhost:5080/openapi). It exposes the health endpoint in this phase.
+Development OpenAPI is available at [localhost:5080/openapi](http://localhost:5080/openapi). It documents health and transfers. Production never registers the test authentication header.
 
 Stop the services without deleting database data:
 
@@ -71,7 +71,7 @@ dotnet build backend/Tetri.sln --configuration Release --no-restore
 dotnet test backend/Tetri.sln --configuration Release --no-build
 ```
 
-Tests create isolated PostgreSQL containers; they never use the Compose database. The unit-test project is reserved for Phase 2 domain behavior; Phase 1 checks are integration tests. CI also builds the API container, starts Compose and checks the HTTP health endpoint.
+Tests create isolated PostgreSQL containers; they never use the Compose database. Unit tests cover integer money formatting/parsing and stable canonical request hashing. CI also builds the API container, starts Compose and checks the HTTP health endpoint. EF reads and raw SQL share one connection pool, capped by `Database:MaxPoolSize` (64 by default).
 
 The mobile project will be introduced in Phase 4. Flutter run instructions will be added when that project exists.
 
@@ -81,12 +81,12 @@ The mobile project will be introduced in Phase 4. Flutter run instructions will 
 backend/
   Tetri.sln
   src/
-    Tetri.Api/              Health endpoint, logging and startup
-    Tetri.Core/             Domain entity types
-    Tetri.Infrastructure/   EF mappings, migrations and database factory
+    Tetri.Api/              Endpoints, logging and ledger maintenance
+    Tetri.Core/             Domain types, integer money and request hashing
+    Tetri.Infrastructure/   EF schema, raw SQL ledger and idempotency
   tests/
-    Tetri.UnitTests/        Domain tests from Phase 2
-    Tetri.IntegrationTests/ PostgreSQL constraint and API tests
+    Tetri.UnitTests/        Money and request hashing tests
+    Tetri.IntegrationTests/ PostgreSQL constraints, ledger races and API tests
 .github/workflows/ci.yml    Backend build, tests and Compose smoke check
 docker-compose.yml         Local PostgreSQL and API
 AGENTS.MD                  Product specification and phase gates
@@ -99,4 +99,9 @@ AGENTS.MD                  Product specification and phase gates
 - PostgreSQL tests on the CI Docker host: all 27 pass, with zero skipped tests.
 - Docker Compose startup and HTTP health: pass on the CI Docker host.
 - GitHub CI: [Phase 1 verification passed](https://github.com/Ggaming5005/Tetri/actions/runs/41667540405).
-- Phase 2 begins after these checks; no ledger posting endpoint is included in this foundation revision.
+
+## Phase 2 verification status
+
+- Local unit tests: 41 pass, with zero skipped tests.
+- Integration suite, including the concurrency and takeover races: verification in progress.
+- The Phase 2 gate requires three consecutive successful full-suite runs; Phase 3 has not started.

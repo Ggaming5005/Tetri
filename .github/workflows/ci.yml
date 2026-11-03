@@ -23,8 +23,11 @@ jobs:
         run: dotnet restore backend/Tetri.sln --locked-mode
       - name: Build
         run: dotnet build backend/Tetri.sln --configuration Release --no-restore
-      - name: Test against real PostgreSQL
-        run: dotnet test backend/Tetri.sln --configuration Release --no-build --logger "trx;LogFilePrefix=results" --results-directory TestResults
+      - name: Test against real PostgreSQL three consecutive times
+        run: |
+          for attempt in 1 2 3; do
+            dotnet test backend/Tetri.sln --configuration Release --no-build --logger "trx;LogFilePrefix=results" --results-directory "TestResults/run-$attempt"
+          done
       - name: Verify Docker Compose startup and health
         run: |
           printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" > .env
