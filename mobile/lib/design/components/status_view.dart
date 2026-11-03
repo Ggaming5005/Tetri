@@ -15,6 +15,7 @@ class StatusView extends StatelessWidget {
     required this.actionLabel,
     required this.onAction,
     this.isSuccess = true,
+    this.isPending = false,
     this.message,
   });
 
@@ -23,64 +24,91 @@ class StatusView extends StatelessWidget {
   final String actionLabel;
   final VoidCallback onAction;
   final bool isSuccess;
+  final bool isPending;
   final String? message;
 
   @override
   Widget build(BuildContext context) {
-    final colors = TetriColors.of(context);
     return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: constraints.hasBoundedHeight ? constraints.maxHeight : 0,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: TetriSpace.x48),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  isSuccess
-                      ? PhosphorIconsRegular.checkCircle
-                      : PhosphorIconsRegular.warningCircle,
-                  size: TetriSizes.statusIcon,
-                  color: isSuccess ? colors.positive : colors.negative,
-                ),
-                const SizedBox(height: TetriSpace.x24),
-                Semantics(
-                  header: true,
-                  liveRegion: true,
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: TetriTypography.headline.copyWith(
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: TetriSpace.x12),
-                AmountText(
-                  amount,
-                  size: AmountSize.title,
-                  textAlign: TextAlign.center,
-                ),
-                if (message != null) ...[
-                  const SizedBox(height: TetriSpace.x16),
-                  Text(
-                    message!,
-                    textAlign: TextAlign.center,
-                    style: TetriTypography.body.copyWith(
-                      color: colors.textSecondary,
-                    ),
-                  ),
+      builder: (context, constraints) {
+        final summary = Padding(
+          padding: const EdgeInsets.symmetric(vertical: TetriSpace.x24),
+          child: _summary(context),
+        );
+        final action = PrimaryButton(
+          key: const ValueKey('status-action'),
+          label: actionLabel,
+          onPressed: onAction,
+        );
+        if (!constraints.hasBoundedHeight) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              summary,
+              const SizedBox(height: TetriSpace.x24),
+              action,
+            ],
+          );
+        }
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: IntrinsicHeight(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: Center(child: summary)),
+                  const SizedBox(height: TetriSpace.x24),
+                  action,
                 ],
-                const SizedBox(height: TetriSpace.x48),
-                PrimaryButton(label: actionLabel, onPressed: onAction),
-              ],
+              ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _summary(BuildContext context) {
+    final colors = TetriColors.of(context);
+    return Column(
+      key: const ValueKey('status-summary'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isPending
+              ? PhosphorIconsRegular.clock
+              : isSuccess
+              ? PhosphorIconsRegular.checkCircle
+              : PhosphorIconsRegular.warningCircle,
+          size: TetriSizes.statusIcon,
+          color: isPending
+              ? colors.textSecondary
+              : isSuccess
+              ? colors.positive
+              : colors.negative,
         ),
-      ),
+        const SizedBox(height: TetriSpace.x24),
+        Semantics(
+          header: true,
+          liveRegion: true,
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: TetriTypography.headline.copyWith(color: colors.textPrimary),
+          ),
+        ),
+        const SizedBox(height: TetriSpace.x12),
+        AmountText(amount, size: AmountSize.title, textAlign: TextAlign.center),
+        if (message != null) ...[
+          const SizedBox(height: TetriSpace.x16),
+          Text(
+            message!,
+            textAlign: TextAlign.center,
+            style: TetriTypography.body.copyWith(color: colors.textSecondary),
+          ),
+        ],
+      ],
     );
   }
 }

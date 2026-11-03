@@ -56,7 +56,7 @@ class _ComponentGalleryState extends State<ComponentGallery> {
           ),
           _section(TetriStrings.typography),
           const TetriWordmark(),
-          const TetriArtwork(),
+          const TetriCurrencies(),
           const AmountText(Money(123456, 'GEL'), size: AmountSize.display),
           const SizedBox(height: TetriSpace.x16),
           const AmountText(Money(30000, 'USD'), size: AmountSize.title),

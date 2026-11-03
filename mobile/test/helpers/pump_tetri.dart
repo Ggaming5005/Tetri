@@ -10,6 +10,7 @@ Future<void> pumpTetri(
   Brightness brightness = Brightness.light,
   bool disableAnimations = false,
   Size size = const Size(360, 800),
+  TextScaler textScaler = TextScaler.noScaling,
 }) async {
   GoogleFonts.config.allowRuntimeFetching = false;
   tester.view.devicePixelRatio = 1;
@@ -20,7 +21,11 @@ Future<void> pumpTetri(
     MaterialApp(
       theme: brightness == Brightness.dark ? TetriTheme.dark : TetriTheme.light,
       home: MediaQuery(
-        data: MediaQueryData(size: size, disableAnimations: disableAnimations),
+        data: MediaQueryData(
+          size: size,
+          disableAnimations: disableAnimations,
+          textScaler: textScaler,
+        ),
         child: Scaffold(
           body: SafeArea(
             child: Padding(

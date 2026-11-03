@@ -15,14 +15,17 @@ class CurrencyPicker extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     this.enabled = true,
+    this.compact = false,
   });
 
   final List<MoneyAccount> accounts;
   final MoneyAccount selected;
   final ValueChanged<MoneyAccount> onChanged;
   final bool enabled;
+  final bool compact;
 
   Future<void> _choose(BuildContext context) async {
+    FocusManager.instance.primaryFocus?.unfocus();
     final colors = TetriColors.of(context);
     final chosen = await showModalBottomSheet<MoneyAccount>(
       context: context,
@@ -38,36 +41,42 @@ class CurrencyPicker extends StatelessWidget {
             ),
       isScrollControlled: true,
       useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: TetriSizes.sheetMaxWidth),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(TetriRadii.r24),
         ),
       ),
-      builder: (context) => SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(TetriSpace.x24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Semantics(
-                header: true,
-                child: Text(
-                  TetriStrings.chooseAccount,
-                  style: TetriTypography.headline.copyWith(
-                    color: colors.textPrimary,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(TetriSpace.x24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    TetriStrings.chooseAccount,
+                    style: TetriTypography.headline.copyWith(
+                      color: colors.textPrimary,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: TetriSpace.x24),
-              for (final account in accounts)
-                _AccountChoice(
-                  account: account,
-                  selected: account.id == selected.id,
-                  onTap: () => Navigator.pop(context, account),
-                ),
-            ],
+                const SizedBox(height: TetriSpace.x24),
+                for (final account in accounts)
+                  _AccountChoice(
+                    account: account,
+                    selected: account.id == selected.id,
+                    onTap: () => Navigator.pop(context, account),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -84,39 +93,50 @@ class CurrencyPicker extends StatelessWidget {
       enabled: canChoose,
       label: TetriStrings.chooseAccount,
       child: Material(
-        color: colors.surface,
+        color: compact ? Colors.transparent : colors.surface,
         borderRadius: BorderRadius.circular(TetriRadii.r12),
         child: InkWell(
           onTap: canChoose ? () => _choose(context) : null,
           borderRadius: BorderRadius.circular(TetriRadii.r12),
-          child: Padding(
-            padding: const EdgeInsets.all(TetriSpace.x16),
-            child: Row(
-              children: [
-                CurrencyBadge(currency: selected.currency),
-                const SizedBox(width: TetriSpace.x12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        selected.currency,
-                        style: TetriTypography.title.copyWith(
-                          color: canChoose
-                              ? colors.textPrimary
-                              : colors.textDisabled,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: TetriSizes.tap48),
+            child: Padding(
+              padding: compact
+                  ? EdgeInsets.zero
+                  : const EdgeInsets.symmetric(
+                      horizontal: TetriSpace.x16,
+                      vertical: TetriSpace.x12,
+                    ),
+              child: Row(
+                children: [
+                  CurrencyBadge(currency: selected.currency),
+                  const SizedBox(width: TetriSpace.x12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          selected.currency,
+                          style: TetriTypography.title.copyWith(
+                            color: canChoose
+                                ? colors.textPrimary
+                                : colors.textDisabled,
+                          ),
                         ),
-                      ),
-                      AmountText(selected.balance, size: AmountSize.label),
-                    ],
+                        if (!compact)
+                          AmountText(selected.balance, size: AmountSize.label),
+                      ],
+                    ),
                   ),
-                ),
-                Icon(
-                  PhosphorIconsRegular.caretDown,
-                  size: TetriSizes.icon24,
-                  color: canChoose ? colors.textSecondary : colors.textDisabled,
-                ),
-              ],
+                  Icon(
+                    PhosphorIconsRegular.caretDown,
+                    size: TetriSizes.icon24,
+                    color: canChoose
+                        ? colors.textSecondary
+                        : colors.textDisabled,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

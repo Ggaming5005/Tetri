@@ -196,6 +196,7 @@ abstract final class TetriSizes {
   static const double switchThumb = 24;
   static const double switchInset = 4;
   static const double contentMaxWidth = 560;
+  static const double compactViewportHeight = 320;
   static const double sheetMaxWidth = 480;
   static const double artworkHeight = 180;
 }

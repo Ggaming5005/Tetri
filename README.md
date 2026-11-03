@@ -1,43 +1,92 @@
 # Tetri
 
-Tetri is a small multi-currency digital bank built with Flutter and ASP.NET Core. **Sandbox only: no real money.**
+A multi-currency digital bank built with Flutter, ASP.NET Core and a PostgreSQL double-entry ledger. **Sandbox only: no real money.**
 
-Phases 1–4 are verified: the ledger, authentication, account history, official exchange rates, quoted conversions and Flutter design system. App screens are next in Phase 5.
+| Home · light | Convert · dark | Review · light | Sent · dark |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/home-light.png" width="200" alt="Tetri Home with GEL, USD and EUR accounts and recent activity"> | <img src="docs/screenshots/convert-dark.png" width="200" alt="Currency conversion preview with rate, fee and amount received"> | <img src="docs/screenshots/transfer-review-light.png" width="200" alt="Transfer review showing the recipient and exact amount before confirmation"> | <img src="docs/screenshots/sent-dark.png" width="200" alt="Sent result showing the completed transfer amount"> |
+
+*UI previews rendered from the app's Flutter widgets at 360 × 800, using deterministic demo data. [Image provenance](docs/screenshots/previews.md); physical-device checks are recorded separately below.*
+
+<details>
+<summary>See the native Android keyboard</summary>
+
+<img src="docs/screenshots/native-keyboard.png" width="280" alt="Tetri Send amount screen with Android's native decimal keyboard open and 12.50 USD entered">
+
+Captured on an Android emulator connected to the local API. This shows entering 12.50 USD before review; the payment shown here has not been confirmed.
+
+</details>
 
 ## Try it
 
-The local API is available through the commands below. Register two users to try transfers and currency conversion; [the API guide](docs/api.md) describes the requests, session handling and response shapes. An APK, hosted demo and demo accounts will be available after the mobile phases.
+[Run the API and Android app locally](#run-locally), then create two users to send money between them. Each new user receives **₾1,000.00, $300.00 and €300.00** in sandbox starter grants.
+
+```mermaid
+flowchart LR
+  Signup[Create an account] --> Accounts[Three currency accounts]
+  Accounts --> Send[Send money]
+  Accounts --> Convert[Convert currencies]
+  Send --> Review[Review and confirm]
+  Convert --> Review
+  Review --> Activity[Result and activity]
+```
+
+You can build and install a local debug APK with the commands below. A published release APK and hosted API are **not available yet**; there are no shared demo credentials. Signup, PIN and fingerprint unlock, and a 12.50 USD transfer have been verified on a physical Android phone. The live currency-conversion check remains pending because the local NBG feed supplied future-dated rates. [Verification record and remaining gates →](docs/verification.md)
 
 ## How the money works
 
-The database models a double-entry ledger. Every journal must balance separately in each currency. Amounts and cached account balances use integer minor units, and ledger entries are insert-only. The Phase 1 migration creates this schema and protects entries and audit rows from updates, deletes and truncation.
+**Money is an integer.** `2500` means 25.00 GEL, represented in JSON as `{ "minor": 2500, "currency": "GEL" }`. Every movement writes a journal with immutable entries that sum to zero within each currency. Cached balances are derived from those entries and checked by reconciliation.
 
-Posting takes ordered account row locks inside one PostgreSQL transaction. User balances have a database constraint preventing negative values. Integration tests compare each cached balance with its ledger entries, and an hourly reconciliation checks the same invariants without modifying money.
+**Concurrent requests cannot spend the same balance twice.** Posting locks all affected accounts in ascending ID order, checks the locked balance, then commits the entries, cached balances and audit row together. PostgreSQL also rejects negative user balances. A 25.00 GEL transfer writes exactly these two entries:
 
-Transfers and conversions require idempotency keys. A claim ownership token and locked key row prevent retries and stale workers from moving money twice. Successful responses commit with the money movement, and guarded rejection caching preserves final outcomes. Conversions execute the exact amounts in a stored 60-second quote. See [the worked ledger example](docs/ledger.md) for the rows written when Giorgi sends 25.00 GEL to Nino.
+| Account | Currency | Entry in minor units | Balance change |
+| --- | --- | ---: | ---: |
+| Giorgi's GEL account | GEL | −2500 | −₾25.00 |
+| Nino's GEL account | GEL | +2500 | +₾25.00 |
+| **Sum** | **GEL** | **0** | **₾0.00** |
+
+**Retries reuse one result.** A short transaction claims the idempotency key; the money transaction locks that claim, verifies its attempt token and commits the successful response with the transfer. Retrying the same key and body replays that response within the 24-hour retention window. Conversions execute the exact amounts from a stored 60-second quote; a completed retry still replays after quote expiry while its key is retained. [The ledger guide](docs/ledger.md) shows the exact rows, lock ordering, takeover protection and rejection handling.
 
 ## Proof
 
 [![CI](https://github.com/Ggaming5005/Tetri/actions/workflows/ci.yml/badge.svg)](https://github.com/Ggaming5005/Tetri/actions/workflows/ci.yml)
 
-Phase 1 tests use PostgreSQL 17 through Testcontainers to verify schema constraints, migration repeatability, immutable ledger/audit tables, seeded system accounts, and healthy/unavailable database responses. Each integration test class also checks ledger invariants before disposing its database.
+The concurrency test sends **50 simultaneous requests for 10.00 GEL** against an account holding **100.00 GEL**: exactly 10 succeed, 40 fail with `insufficient_funds`, and the balance ends at zero. It repeats the scenario 20 times; CI runs the entire backend suite three consecutive times.
 
-The concurrency test sends 50 competing HTTP requests against a 100.00 GEL balance, requiring exactly ten 10.00 GEL transfers to succeed. It repeats that scenario twenty times, alongside opposite-direction transfers and deterministic idempotency takeover races; CI runs the entire backend suite three consecutive times.
+| Check | Verified result |
+| --- | --- |
+| Backend | **185 tests**: 56 unit + 129 integration tests against real PostgreSQL; three consecutive CI runs |
+| Mobile | **336 tests**, including PIN/session security, responsive layouts and light/dark Home and Send-review goldens; analysis reports zero issues |
+| Startup | Docker Compose builds the API, starts PostgreSQL and passes the HTTP health check |
+| Physical Android | Signup, all starter balances, PIN and fingerprint unlock, 12.50 USD transfer, activity and restored session |
+
+[CI runs](https://github.com/Ggaming5005/Tetri/actions/workflows/ci.yml) · [Test commands, phase history and open acceptance checks](docs/verification.md)
 
 ## Tech stack
 
-- .NET 10, ASP.NET Core minimal APIs, EF Core and Npgsql
-- PostgreSQL 17, Docker Compose
-- xUnit, FluentAssertions and Testcontainers
-- Serilog and GitHub Actions
-- Flutter 3.47.9, Riverpod, go_router and dio
-- Bundled Inter, Phosphor outline icons, light/dark semantic themes
+- **Mobile:** Flutter 3.47.9, Riverpod, go_router, dio, secure storage and local biometrics. Bundled Inter and Phosphor outline icons; light and dark themes.
+- **API:** .NET 10 minimal APIs, EF Core, Npgsql and Serilog. JWT access tokens, rotating refresh tokens, ownership checks and rate limiting.
+- **Data and verification:** PostgreSQL 17, Docker Compose, xUnit, FluentAssertions, Testcontainers and GitHub Actions.
 
-The .NET SDK is pinned in `global.json`; NuGet lock files are committed. Docker Compose and tests use PostgreSQL `17.11-alpine`.
+```mermaid
+flowchart LR
+  App[Flutter app] -->|JSON API and JWT| Api
+  subgraph Backend[One ASP.NET Core process]
+    Api[Endpoints and services]
+    Fetch[Background rate fetcher]
+  end
+  Api -->|Reads and atomic posting| Db[(PostgreSQL 17)]
+  NBG[National Bank of Georgia] -->|Official daily rates| Fetch
+  Fetch -->|Store effective dates| Db
+```
+
+PostgreSQL holds accounts, ledger entries, audit records, idempotency keys, quotes and rates in one database. Conversions use stored effective rates; the NBG feed is not called for each payment. The .NET SDK and package versions are pinned, and Compose/tests use PostgreSQL `17.11-alpine`.
 
 ## Run locally
 
-Install Docker Desktop with Linux containers and start its engine. The .NET 10 SDK is needed to build and run tests outside Docker.
+Use Docker Desktop with Linux containers, Flutter **3.47.9**, and an Android emulator or USB-connected phone. The .NET 10 SDK is needed only for backend development and tests outside Docker.
+
+### Start the API
 
 From the repository root in PowerShell:
 
@@ -46,49 +95,45 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-Set `POSTGRES_PASSWORD` to a long random local password and `JWT_SIGNING_KEY` to a separate random secret of at least 32 bytes, save, then run:
+Set `POSTGRES_PASSWORD` to a long random local password and `JWT_SIGNING_KEY` to a separate random secret of **at least 32 bytes**, then save:
 
 ```powershell
 docker compose up --build -d --wait
 Invoke-RestMethod http://localhost:5080/api/v1/health
 ```
 
-The health response is `{"status":"ok","database":"ok"}`. On first startup the API applies the committed migrations after PostgreSQL becomes healthy. Database data persists in the `postgres_data` volume. Ports bind to localhost; `.env` is ignored by Git.
+Expected response: `{"status":"ok","database":"ok"}`. Startup applies the committed migrations. Ports bind to localhost, `.env` is ignored by Git, and data persists in the `postgres_data` volume. Development [OpenAPI is at localhost:5080/openapi](http://localhost:5080/openapi); the [API guide](docs/api.md) documents requests and responses.
 
-Development OpenAPI is available at [localhost:5080/openapi](http://localhost:5080/openapi). All protected endpoints require real JWT access tokens, including during HTTP integration tests. There is no test authentication scheme in the API.
+If a fresh database has only future-dated NBG rates, conversions return `503 rates_unavailable` until a rate becomes effective. Previously stored valid rates remain usable during feed failures. Signup, history and same-currency transfers remain available.
 
-The NBG feed may publish tomorrow's rates. A fresh database with only future-dated rates returns `503 rates_unavailable` until those rates become effective; existing valid rates stay available during fetch failures. This never prevents registration, account history or same-currency transfers.
+### Run the app
 
-Stop the services without deleting database data:
-
-```powershell
-docker compose down
-```
-
-Build and run the tests with Docker running:
-
-```powershell
-dotnet tool restore
-dotnet restore backend/Tetri.sln --locked-mode
-dotnet build backend/Tetri.sln --configuration Release --no-restore
-dotnet test backend/Tetri.sln --configuration Release --no-build
-```
-
-Tests create isolated PostgreSQL containers; they never use the Compose database. Unit tests cover integer money formatting/parsing, stable canonical request hashing, FX rounding and a saved real NBG response. CI also builds the API container, starts Compose and checks the HTTP health endpoint. EF reads and raw SQL share one connection pool, capped by `Database:MaxPoolSize` (64 by default).
-
-Run the development component gallery on Android with the pinned Flutter version:
+For an Android emulator, from the repository root:
 
 ```powershell
 cd mobile
 flutter pub get --enforce-lockfile
-flutter analyze --fatal-infos
-flutter test
-flutter run --dart-define=TETRI_GALLERY=true
+flutter run
 ```
 
-The gallery is available only in debug builds at `/__gallery`; long-press the Tetri wordmark to open it from the brand preview. Its theme selector switches between system, light and dark. Interactive previews include loading, disabled, empty, success and failure states. The actual banking screens are added in Phase 5.
+The emulator uses `http://10.0.2.2:5080/api/v1` by default. For a physical phone, enable USB debugging, accept its debugging prompt, and run these commands from `mobile/`, replacing `<device-id>` with the ID listed by `adb`:
 
-Inter and the original welcome artwork are bundled, so rendering does not require a font or image download. [Artwork provenance and prompts](docs/design-assets.md) are recorded with the project. The icon dependency is `phosphor_glyphs`: it preserves the chosen Phosphor outline set while supporting the latest Flutter's final `IconData` class. The older `phosphor_flutter` and `lucide_icons` packages named in the original spec do not compile with this SDK.
+```powershell
+adb devices
+adb -s <device-id> reverse tcp:5080 tcp:5080
+flutter run -d <device-id> --dart-define=TETRI_API_URL=http://127.0.0.1:5080/api/v1
+```
+
+To build and install the debug APK instead of launching through Flutter, keep the USB reverse rule above and run from `mobile/`:
+
+```powershell
+flutter build apk --debug --dart-define=TETRI_API_URL=http://127.0.0.1:5080/api/v1
+adb -s <device-id> install -r build/app/outputs/flutter-apk/app-debug.apk
+```
+
+Keep Docker Compose running while using the app. Local HTTP is allowed only by the Android debug manifest. After sign-in, choose and confirm a four-digit app PIN; fingerprint or face unlock remains optional. Existing biometric sessions first unlock, then create their PIN. The saved session is read only after successful PIN or biometric verification, and locking preserves a pending payment's confirmation key. [App lock and recovery](docs/app-lock.md) explains attempt limits and forgotten-PIN recovery. Refresh retries share a fixed 60-second grace window: if a refresh response is lost and the phone stays offline longer, sign in again.
+
+The debug-only component gallery runs with `flutter run --dart-define=TETRI_GALLERY=true`, or opens by long-pressing the Welcome wordmark. [Build/test commands and golden-test guidance](docs/verification.md#run-the-checks) are in the verification guide. Stop the API from the repository root with `docker compose down`; this preserves database data.
 
 ## Project structure
 
@@ -96,44 +141,19 @@ Inter and the original welcome artwork are bundled, so rendering does not requir
 backend/
   Tetri.sln
   src/
-    Tetri.Api/              Authenticated endpoints, limits and background jobs
+    Tetri.Api/              Endpoints, authentication, limits and background jobs
     Tetri.Core/             Domain types, money, FX math and request hashing
     Tetri.Infrastructure/   Persistence, ledger, auth, queries and NBG rates
-  tests/
-    Tetri.UnitTests/        Money and request hashing tests
-    Tetri.IntegrationTests/ PostgreSQL constraints, ledger races and API tests
-.github/workflows/ci.yml    Backend build, tests and Compose smoke check
-mobile/                    Flutter design system, component gallery and widget tests
+  tests/                   Unit tests and real PostgreSQL integration tests
+mobile/
+  lib/design/              Tokens, typography and reusable components
+  lib/core/                API client, session, money and errors
+  lib/features/            Auth, banking screens and payment flows
+  test/                    Unit, widget and golden tests
+docs/                      Ledger, API, verification, design notes and previews
+.github/workflows/ci.yml    Backend and Flutter verification
 docker-compose.yml         Local PostgreSQL and API
 AGENTS.MD                  Product specification and phase gates
 ```
 
-## Phase 1 verification status
-
-- Release build: passes with zero warnings and zero errors.
-- Local PostgreSQL tests: pass with Docker Desktop and WSL 2.
-- PostgreSQL tests on the CI Docker host: all 27 pass, with zero skipped tests.
-- Docker Compose startup and HTTP health: pass locally and on the CI Docker host.
-- GitHub CI: [Phase 1 verification passed](https://github.com/Ggaming5005/Tetri/actions/runs/41667540405).
-
-## Phase 2 verification status
-
-- Local unit tests: 41 pass, with zero skipped tests.
-- Integration suite: 63 pass, with zero skipped tests, including concurrency, takeover races and malformed JSON regressions.
-- The entire suite passed three consecutive runs locally and in [the final Phase 2 CI run](https://github.com/Ggaming5005/Tetri/actions/runs/41670862692), against real PostgreSQL.
-- Phase 3 adds authentication, read APIs, rates, quotes and conversions.
-
-## Phase 3 verification status
-
-- Registration, login, session rotation/logout, handle availability, account/history reads, lookup, rates, quotes and conversions are implemented.
-- The full suite passes 56 unit tests and 129 PostgreSQL integration tests locally, with zero skipped tests. Release build and formatting checks pass with zero warnings/errors. [Phase 3 CI](https://github.com/Ggaming5005/Tetri/actions/runs/41673814461) passed three consecutive full-suite runs and the Docker Compose check.
-- Docker Compose starts the complete API locally; the health check passes and the development OpenAPI document lists all 16 routes.
-- HTTP tests use real access tokens; rate-limit tests use the production defaults.
-- Refresh retries never extend the original 60-second grace window. If a refresh response is lost and the device remains offline longer than that, the next retry ends that session and requires sign-in.
-
-## Phase 4 verification status
-
-- All required components, theme tokens and typography are implemented. Local analysis reports zero issues.
-- 113 tests cover components, 38 required contrast pairs, extra state/avatar contrast, minor-unit formatting, keypad boundaries, reduced motion and a small-phone gallery in both themes.
-- The debug APK builds and runs on an Android API 36 emulator at 360 dp width. Light and dark gallery screens and transfer review sheets were visually checked; captures are in `docs/screenshots/`.
-- Both jobs passed in [Phase 4 CI](https://github.com/Ggaming5005/Tetri/actions/runs/41677108152): all 113 Flutter tests, analysis with zero issues, and three consecutive runs of all 185 backend tests plus the Compose smoke check.
+[Ledger](docs/ledger.md) · [API](docs/api.md) · [App lock](docs/app-lock.md) · [Verification](docs/verification.md) · [Design review](docs/design-review.md) · [Artwork notes](docs/design-assets.md)

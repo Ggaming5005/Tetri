@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tetri/core/money.dart';
 import 'package:tetri/core/strings.dart';
 import 'package:tetri/design/components/account_card.dart';
+import 'package:tetri/design/components/currency_flag.dart';
 import 'package:tetri/design/components/amount_keypad.dart';
 import 'package:tetri/design/components/amount_text.dart';
 import 'package:tetri/design/components/currency_picker.dart';
@@ -156,7 +157,10 @@ void main() {
           find.text(TetriStrings.currencyName(account.currency)),
           findsOneWidget,
         );
-        expect(find.text(MoneyFormat.flag(account.currency)), findsOneWidget);
+        expect(
+          tester.widget<CurrencyFlag>(find.byType(CurrencyFlag)).currency,
+          account.currency,
+        );
         expect(
           find.text(MoneyFormat.format(account.balance), findRichText: true),
           findsOneWidget,

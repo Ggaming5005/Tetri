@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/strings.dart';
 import '../tokens.dart';
 import '../typography.dart';
+import 'currency_flag.dart';
 
 class TetriWordmark extends StatelessWidget {
   const TetriWordmark({super.key});
@@ -16,14 +17,30 @@ class TetriWordmark extends StatelessWidget {
   );
 }
 
-class TetriArtwork extends StatelessWidget {
-  const TetriArtwork({super.key});
+class TetriCurrencies extends StatelessWidget {
+  const TetriCurrencies({super.key});
 
   @override
-  Widget build(BuildContext context) => Image.asset(
-    'assets/illustrations/welcome.png',
+  Widget build(BuildContext context) => SizedBox(
     height: TetriSizes.artworkHeight,
-    fit: BoxFit.contain,
-    excludeFromSemantics: true,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        for (final currency in const ['GEL', 'USD', 'EUR'])
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ExcludeSemantics(child: CurrencyFlag(currency: currency)),
+              const SizedBox(height: TetriSpace.x16),
+              Text(
+                currency,
+                style: TetriTypography.label.copyWith(
+                  color: TetriColors.of(context).textSecondary,
+                ),
+              ),
+            ],
+          ),
+      ],
+    ),
   );
 }
