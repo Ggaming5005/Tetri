@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -19,13 +20,14 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         for (var iteration = 0; iteration < 20; iteration++)
         {
             var sender = await bank.CreateUserAsync(10_000);
+            var senderToken = (await AuthTestClient.LoginAsync(client, sender)).AccessToken;
             var recipient = await bank.CreateUserAsync(0);
             var request = new TransferRequest(recipient.Handle, new MoneyAmount(1_000, "GEL"));
             var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var requests = Enumerable.Range(0, 50).Select(async _ =>
             {
                 await start.Task;
-                return await PostAsync(client, sender.Id, NewKey(), request);
+                return await PostAsync(client, senderToken, NewKey(), request);
             }).ToArray();
 
             start.SetResult();
@@ -57,13 +59,15 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         using var client = factory.CreateClient();
         var first = await bank.CreateUserAsync(100_000);
         var second = await bank.CreateUserAsync(100_000);
+        var firstToken = (await AuthTestClient.LoginAsync(client, first)).AccessToken;
+        var secondToken = (await AuthTestClient.LoginAsync(client, second)).AccessToken;
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var requests = Enumerable.Range(0, 100).Select(async index =>
         {
             await start.Task;
-            var sender = index % 2 == 0 ? first : second;
+            var senderToken = index % 2 == 0 ? firstToken : secondToken;
             var recipient = index % 2 == 0 ? second : first;
-            return await PostAsync(client, sender.Id, NewKey(),
+            return await PostAsync(client, senderToken, NewKey(),
                 new TransferRequest(recipient.Handle, new MoneyAmount(100, "GEL")));
         }).ToArray();
 
@@ -87,12 +91,13 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync(10_000);
+        var senderToken = (await AuthTestClient.LoginAsync(client, sender)).AccessToken;
         var recipient = await bank.CreateUserAsync(0);
         var request = new TransferRequest(recipient.Handle, new MoneyAmount(2_500, "GEL"), "Lunch");
         var key = NewKey();
 
-        var first = await PostAsync(client, sender.Id, key, request);
-        var retry = await PostAsync(client, sender.Id, key, request);
+        var first = await PostAsync(client, senderToken, key, request);
+        var retry = await PostAsync(client, senderToken, key, request);
 
         first.Status.Should().Be(HttpStatusCode.Created);
         retry.Should().Be(first);
@@ -112,13 +117,14 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync(10_000);
+        var senderToken = (await AuthTestClient.LoginAsync(client, sender)).AccessToken;
         var recipient = await bank.CreateUserAsync(0);
         var key = NewKey();
         var firstJson = $$$"""{"recipientHandle":"{{{recipient.Handle}}}","amount":{"minor":1000,"currency":"GEL"}}""";
         var secondJson = $$$"""{ "amount": { "currency": "GEL", "minor": 1000 }, "recipientHandle": "{{{recipient.Handle}}}" }""";
 
-        var first = await PostJsonAsync(client, sender.Id, key, firstJson);
-        var reordered = await PostJsonAsync(client, sender.Id, key, secondJson);
+        var first = await PostJsonAsync(client, senderToken, key, firstJson);
+        var reordered = await PostJsonAsync(client, senderToken, key, secondJson);
 
         first.Status.Should().Be(HttpStatusCode.Created);
         reordered.Should().Be(first);
@@ -132,12 +138,13 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync(10_000);
+        var senderToken = (await AuthTestClient.LoginAsync(client, sender)).AccessToken;
         var recipient = await bank.CreateUserAsync(0);
         var request = new TransferRequest(recipient.Handle, new MoneyAmount(1_000, "GEL"));
         var key = NewKey();
 
-        var responses = await Task.WhenAll(PostAsync(client, sender.Id, key, request), PostAsync(client, sender.Id, key, request));
-        var retry = await PostAsync(client, sender.Id, key, request);
+        var responses = await Task.WhenAll(PostAsync(client, senderToken, key, request), PostAsync(client, senderToken, key, request));
+        var retry = await PostAsync(client, senderToken, key, request);
 
         responses.Should().Contain(response => response.Status == HttpStatusCode.Created);
         foreach (var response in responses)
@@ -167,9 +174,10 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync();
+        var senderToken = (await AuthTestClient.LoginAsync(client, sender)).AccessToken;
         var recipient = await bank.CreateUserAsync(0);
 
-        var response = await PostAsync(client, sender.Id, key,
+        var response = await PostAsync(client, senderToken, key,
             new TransferRequest(recipient.Handle, new MoneyAmount(100, "GEL")));
 
         response.Status.Should().Be(HttpStatusCode.BadRequest);
@@ -187,9 +195,10 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync();
+        var senderToken = (await AuthTestClient.LoginAsync(client, sender)).AccessToken;
         var recipient = await bank.CreateUserAsync(0);
 
-        var response = await PostAsync(client, sender.Id, NewKey(),
+        var response = await PostAsync(client, senderToken, NewKey(),
             new TransferRequest(recipient.Handle, new MoneyAmount(amount, currency)));
 
         response.Status.Should().Be(HttpStatusCode.BadRequest);
@@ -212,9 +221,10 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync();
+        var senderToken = (await AuthTestClient.LoginAsync(client, sender)).AccessToken;
         var balanceBefore = await bank.BalanceAsync(sender.Id);
 
-        var response = await PostJsonAsync(client, sender.Id, NewKey(), json);
+        var response = await PostJsonAsync(client, senderToken, NewKey(), json);
 
         response.Status.Should().Be(HttpStatusCode.BadRequest);
         response.Code.Should().Be("invalid_request");
@@ -229,11 +239,12 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
         await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync(10_000);
+        var senderToken = (await AuthTestClient.LoginAsync(client, sender)).AccessToken;
         var recipient = await bank.CreateUserAsync(0);
         var key = NewKey();
-        await PostAsync(client, sender.Id, key, new TransferRequest(recipient.Handle, new MoneyAmount(100, "GEL")));
+        await PostAsync(client, senderToken, key, new TransferRequest(recipient.Handle, new MoneyAmount(100, "GEL")));
 
-        var response = await PostAsync(client, sender.Id, key, new TransferRequest(recipient.Handle, new MoneyAmount(200, "GEL")));
+        var response = await PostAsync(client, senderToken, key, new TransferRequest(recipient.Handle, new MoneyAmount(200, "GEL")));
 
         response.Status.Should().Be(HttpStatusCode.UnprocessableEntity);
         response.Code.Should().Be("idempotency_key_reused");
@@ -245,15 +256,21 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
     public async Task Production_authentication_never_accepts_the_test_user_header()
     {
         await using var bank = new LedgerTestBank(database.ConnectionString);
-        await using var factory = new TransferApiFactory(database.ConnectionString, authenticateTestUsers: false);
+        await using var factory = new TransferApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
         var sender = await bank.CreateUserAsync();
         var recipient = await bank.CreateUserAsync(0);
 
-        var response = await PostAsync(client, sender.Id, NewKey(),
-            new TransferRequest(recipient.Handle, new MoneyAmount(100, "GEL")));
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/transfers")
+        {
+            Content = System.Net.Http.Json.JsonContent.Create(
+                new TransferRequest(recipient.Handle, new MoneyAmount(100, "GEL")))
+        };
+        request.Headers.Add("X-Test-User", sender.Id.ToString("D"));
+        request.Headers.Add("Idempotency-Key", NewKey());
+        using var response = await client.SendAsync(request);
 
-        response.Status.Should().Be(HttpStatusCode.Unauthorized);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         await AssertNoClaimOrTransferAsync(bank, sender.Id);
     }
 
@@ -266,16 +283,16 @@ public sealed class TransferEndpointTests(PostgresFixture database) : IClassFixt
 
     private static string NewKey() => Guid.CreateVersion7().ToString("D");
 
-    private static Task<HttpOutcome> PostAsync(HttpClient client, Guid userId, string? key, TransferRequest transfer) =>
-        PostJsonAsync(client, userId, key, JsonSerializer.Serialize(transfer, LedgerTestBank.Json));
+    private static Task<HttpOutcome> PostAsync(HttpClient client, string accessToken, string? key, TransferRequest transfer) =>
+        PostJsonAsync(client, accessToken, key, JsonSerializer.Serialize(transfer, LedgerTestBank.Json));
 
-    private static async Task<HttpOutcome> PostJsonAsync(HttpClient client, Guid userId, string? key, string json)
+    private static async Task<HttpOutcome> PostJsonAsync(HttpClient client, string accessToken, string? key, string json)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/transfers")
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
-        request.Headers.Add("X-Test-User", userId.ToString("D"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         if (key is not null)
         {
             request.Headers.Add("Idempotency-Key", key);

@@ -25,6 +25,7 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__Database: Host=postgres;Port=5432;Database=${POSTGRES_DB:-tetri};Username=${POSTGRES_USER:-tetri};Password=${POSTGRES_PASSWORD}
       Database__ApplyMigrations: "true"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY to a random secret of at least 32 bytes in .env}
     ports:
       - "127.0.0.1:${API_PORT:-5080}:8080"
     depends_on:

@@ -2,6 +2,7 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Identity;
 using Npgsql;
 using Tetri.Core.Ledger;
 using Tetri.Infrastructure.Idempotency;
@@ -136,17 +137,20 @@ internal sealed class LedgerTestBank(string connectionString) : IAsyncDisposable
         var id = Guid.CreateVersion7();
         var handle = "@u" + id.ToString("N")[16..];
         const string displayName = "Ledger Test";
+        var email = $"{id:N}@example.test";
+        var user = new TestUser(id, handle, displayName, email);
         await using var command = new NpgsqlCommand(
             """
             INSERT INTO users (id, email, display_name, handle, password_hash)
-            VALUES (@id, @email, @name, @handle, 'fixture-password-hash');
+            VALUES (@id, @email, @name, @handle, @password_hash);
             """, connection, transaction);
         command.Parameters.AddWithValue("id", id);
-        command.Parameters.AddWithValue("email", $"{id:N}@example.test");
+        command.Parameters.AddWithValue("email", email);
         command.Parameters.AddWithValue("name", displayName);
         command.Parameters.AddWithValue("handle", handle);
+        command.Parameters.AddWithValue("password_hash", new PasswordHasher<TestUser>().HashPassword(user, TestCredentials.Password));
         await command.ExecuteNonQueryAsync();
-        return new TestUser(id, handle, displayName);
+        return user;
     }
 
     private static async Task TopUpAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid userId, long amount)
@@ -176,4 +180,4 @@ internal sealed class LedgerTestBank(string connectionString) : IAsyncDisposable
     }
 }
 
-internal sealed record TestUser(Guid Id, string Handle, string DisplayName);
+internal sealed record TestUser(Guid Id, string Handle, string DisplayName, string Email);

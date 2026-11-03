@@ -66,7 +66,11 @@ public sealed class HealthEndpointTests(PostgresFixture database) : IClassFixtur
                 new Dictionary<string, string?>
                 {
                     ["ConnectionStrings:Database"] = connectionString,
-                    ["Database:ApplyMigrations"] = "false"
+                    ["Database:ApplyMigrations"] = "false",
+                    ["Jwt:SigningKey"] = TestCredentials.SigningKey,
+                    ["Jwt:Issuer"] = "Tetri",
+                    ["Jwt:Audience"] = "Tetri.Mobile",
+                    ["Fx:FetchEnabled"] = "false"
                 }));
             return base.CreateHost(builder);
         }

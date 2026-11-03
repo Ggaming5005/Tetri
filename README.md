@@ -2,11 +2,11 @@
 
 Tetri is a small multi-currency digital bank built with Flutter and ASP.NET Core. **Sandbox only: no real money.**
 
-Phases 1 and 2 are verified: the backend foundation, ledger posting and idempotent transfers. Mobile screens and screenshots arrive in Phases 4–5.
+Phases 1–3 are verified locally: the ledger, authentication, account history, official exchange rates and quoted conversions. Mobile screens and screenshots arrive in Phases 4–5.
 
 ## Try it
 
-The local API is available through the commands below. An APK, hosted demo and demo accounts will be available after the later build phases. Registration and sign-in arrive in Phase 3; the transfer endpoint currently requires authentication supplied only by the integration-test host.
+The local API is available through the commands below. Register two users to try transfers and currency conversion; [the API guide](docs/api.md) describes the requests, session handling and response shapes. An APK, hosted demo and demo accounts will be available after the mobile phases.
 
 ## How the money works
 
@@ -14,7 +14,7 @@ The database models a double-entry ledger. Every journal must balance separately
 
 Posting takes ordered account row locks inside one PostgreSQL transaction. User balances have a database constraint preventing negative values. Integration tests compare each cached balance with its ledger entries, and an hourly reconciliation checks the same invariants without modifying money.
 
-Transfers require idempotency keys. A claim ownership token and locked key row prevent retries and stale workers from moving money twice. Successful responses commit with the money movement, and guarded rejection caching preserves final outcomes. See [the worked ledger example](docs/ledger.md) for the rows written when Giorgi sends 25.00 GEL to Nino. Conversions will use the same machinery in Phase 3.
+Transfers and conversions require idempotency keys. A claim ownership token and locked key row prevent retries and stale workers from moving money twice. Successful responses commit with the money movement, and guarded rejection caching preserves final outcomes. Conversions execute the exact amounts in a stored 60-second quote. See [the worked ledger example](docs/ledger.md) for the rows written when Giorgi sends 25.00 GEL to Nino.
 
 ## Proof
 
@@ -45,7 +45,7 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-Set `POSTGRES_PASSWORD` to a long random local password, save, then run:
+Set `POSTGRES_PASSWORD` to a long random local password and `JWT_SIGNING_KEY` to a separate random secret of at least 32 bytes, save, then run:
 
 ```powershell
 docker compose up --build -d --wait
@@ -54,7 +54,9 @@ Invoke-RestMethod http://localhost:5080/api/v1/health
 
 The health response is `{"status":"ok","database":"ok"}`. On first startup the API applies the committed migrations after PostgreSQL becomes healthy. Database data persists in the `postgres_data` volume. Ports bind to localhost; `.env` is ignored by Git.
 
-Development OpenAPI is available at [localhost:5080/openapi](http://localhost:5080/openapi). It documents health and transfers. Production never registers the test authentication header.
+Development OpenAPI is available at [localhost:5080/openapi](http://localhost:5080/openapi). All protected endpoints require real JWT access tokens, including during HTTP integration tests. There is no test authentication scheme in the API.
+
+The NBG feed may publish tomorrow's rates. A fresh database with only future-dated rates returns `503 rates_unavailable` until those rates become effective; existing valid rates stay available during fetch failures. This never prevents registration, account history or same-currency transfers.
 
 Stop the services without deleting database data:
 
@@ -71,7 +73,7 @@ dotnet build backend/Tetri.sln --configuration Release --no-restore
 dotnet test backend/Tetri.sln --configuration Release --no-build
 ```
 
-Tests create isolated PostgreSQL containers; they never use the Compose database. Unit tests cover integer money formatting/parsing and stable canonical request hashing. CI also builds the API container, starts Compose and checks the HTTP health endpoint. EF reads and raw SQL share one connection pool, capped by `Database:MaxPoolSize` (64 by default).
+Tests create isolated PostgreSQL containers; they never use the Compose database. Unit tests cover integer money formatting/parsing, stable canonical request hashing, FX rounding and a saved real NBG response. CI also builds the API container, starts Compose and checks the HTTP health endpoint. EF reads and raw SQL share one connection pool, capped by `Database:MaxPoolSize` (64 by default).
 
 The mobile project will be introduced in Phase 4. Flutter run instructions will be added when that project exists.
 
@@ -81,9 +83,9 @@ The mobile project will be introduced in Phase 4. Flutter run instructions will 
 backend/
   Tetri.sln
   src/
-    Tetri.Api/              Endpoints, logging and ledger maintenance
-    Tetri.Core/             Domain types, integer money and request hashing
-    Tetri.Infrastructure/   EF schema, raw SQL ledger and idempotency
+    Tetri.Api/              Authenticated endpoints, limits and background jobs
+    Tetri.Core/             Domain types, money, FX math and request hashing
+    Tetri.Infrastructure/   Persistence, ledger, auth, queries and NBG rates
   tests/
     Tetri.UnitTests/        Money and request hashing tests
     Tetri.IntegrationTests/ PostgreSQL constraints, ledger races and API tests
@@ -97,12 +99,20 @@ AGENTS.MD                  Product specification and phase gates
 - Release build: passes with zero warnings and zero errors.
 - Local PostgreSQL tests: pass with Docker Desktop and WSL 2.
 - PostgreSQL tests on the CI Docker host: all 27 pass, with zero skipped tests.
-- Docker Compose startup and HTTP health: pass on the CI Docker host.
+- Docker Compose startup and HTTP health: pass locally and on the CI Docker host.
 - GitHub CI: [Phase 1 verification passed](https://github.com/Ggaming5005/Tetri/actions/runs/41667540405).
 
 ## Phase 2 verification status
 
 - Local unit tests: 41 pass, with zero skipped tests.
 - Integration suite: 63 pass, with zero skipped tests, including concurrency, takeover races and malformed JSON regressions.
-- The entire suite passed three consecutive runs locally against real PostgreSQL. The preceding CI revision also passed three consecutive runs; [the final regression run](https://github.com/Ggaming5005/Tetri/actions/runs/41670862692) records the final Phase 2 revision.
+- The entire suite passed three consecutive runs locally and in [the final Phase 2 CI run](https://github.com/Ggaming5005/Tetri/actions/runs/41670862692), against real PostgreSQL.
 - Phase 3 adds authentication, read APIs, rates, quotes and conversions.
+
+## Phase 3 verification status
+
+- Registration, login, session rotation/logout, handle availability, account/history reads, lookup, rates, quotes and conversions are implemented.
+- The full suite passes 56 unit tests and 129 PostgreSQL integration tests locally, with zero skipped tests. Release build and formatting checks pass with zero warnings/errors. CI verification is in progress.
+- Docker Compose starts the complete API locally; the health check passes and the development OpenAPI document lists all 16 routes.
+- HTTP tests use real access tokens; rate-limit tests use the production defaults.
+- Refresh retries never extend the original 60-second grace window. If a refresh response is lost and the device remains offline longer than that, the next retry ends that session and requires sign-in.

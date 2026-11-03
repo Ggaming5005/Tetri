@@ -22,6 +22,8 @@ public static class TransferEndpoints
     {
         endpoints.MapPost("/api/v1/transfers", PostAsync)
             .RequireAuthorization()
+            .RequireRateLimiting("money")
+            .Accepts<TransferRequest>("application/json")
             .WithName("CreateTransfer")
             .WithSummary("Send money to another Tetri user")
             .Produces<TransferReceipt>(StatusCodes.Status201Created)
