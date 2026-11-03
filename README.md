@@ -49,7 +49,7 @@ You can build and install a local debug APK with the commands below. A published
 
 ## Proof
 
-[GitHub Actions workflow](https://github.com/Ggaming5005/Tetri/actions/workflows/ci.yml)
+[![CI](https://github.com/Ggaming5005/Tetri/actions/workflows/ci.yml/badge.svg)](https://github.com/Ggaming5005/Tetri/actions/workflows/ci.yml)
 
 The concurrency test sends **50 simultaneous requests for 10.00 GEL** against an account holding **100.00 GEL**: exactly 10 succeed, 40 fail with `insufficient_funds`, and the balance ends at zero. It repeats the scenario 20 times; CI runs the entire backend suite three consecutive times.
 
