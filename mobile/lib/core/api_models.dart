@@ -16,9 +16,23 @@ Json moneyToJson(Money money) => {
   'minor': money.minor,
   'currency': money.currency,
 };
-DateTime _date(dynamic value) {
-  final text = value as String;
-  return DateTime.parse(text.length == 10 ? '${text}T00:00:00Z' : text).toUtc();
+DateTime _timestamp(dynamic value) => DateTime.parse(value as String).toUtc();
+
+DateTime _calendarDate(dynamic value) {
+  if (value is! String ||
+      value.length != 10 ||
+      !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
+    throw const FormatException('Invalid rate date');
+  }
+  final year = int.parse(value.substring(0, 4));
+  final month = int.parse(value.substring(5, 7));
+  final day = int.parse(value.substring(8, 10));
+  final date = DateTime.utc(year, month, day);
+  // DateTime normalizes invalid components; calendar dates must not roll over.
+  if (year < 1 || date.year != year || date.month != month || date.day != day) {
+    throw const FormatException('Invalid rate date');
+  }
+  return date;
 }
 
 class AuthUser {
@@ -56,7 +70,7 @@ class SessionData {
   factory SessionData.fromJson(Json json) => SessionData(
     accessToken: json['accessToken'] as String,
     refreshToken: json['refreshToken'] as String,
-    expiresAt: _date(json['expiresAt']),
+    expiresAt: _timestamp(json['expiresAt']),
     user: AuthUser.fromJson(json['user'] as Json),
   );
   Json toJson() => {
@@ -109,7 +123,7 @@ class TransactionView {
     kind: json['kind'] as String,
     status: json['status'] as String,
     description: json['description'] as String,
-    createdAt: _date(json['createdAt']),
+    createdAt: _timestamp(json['createdAt']),
     entries: List.unmodifiable(
       (json['entries'] as List).map(
         (entry) => EntryView.fromJson(entry as Json),
@@ -148,7 +162,7 @@ class FxRate {
   factory FxRate.fromJson(Json json) => FxRate(
     currency: json['currency'] as String,
     rateToGel: json['rateToGel'].toString(),
-    rateDate: _date(json['rateDate']),
+    rateDate: _calendarDate(json['rateDate']),
   );
 }
 
@@ -183,8 +197,8 @@ class FxQuote {
     netOut: moneyFromJson(json['netOut']),
     fee: moneyFromJson(json['fee']),
     rate: json['rate'].toString(),
-    rateDate: _date(json['rateDate']),
-    expiresAt: _date(json['expiresAt']),
+    rateDate: _calendarDate(json['rateDate']),
+    expiresAt: _timestamp(json['expiresAt']),
   );
 }
 
@@ -204,7 +218,7 @@ class TransferReceipt {
     amount: moneyFromJson(json['amount']),
     recipientHandle: json['recipientHandle'] as String,
     recipientDisplayName: json['recipientDisplayName'] as String,
-    createdAt: _date(json['createdAt']),
+    createdAt: _timestamp(json['createdAt']),
   );
 }
 
@@ -229,7 +243,7 @@ class ConversionReceipt {
     netOut: moneyFromJson(json['netOut']),
     fee: moneyFromJson(json['fee']),
     rate: json['rate'].toString(),
-    rateDate: _date(json['rateDate']),
-    createdAt: _date(json['createdAt']),
+    rateDate: _calendarDate(json['rateDate']),
+    createdAt: _timestamp(json['createdAt']),
   );
 }

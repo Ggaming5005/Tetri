@@ -98,6 +98,8 @@ flutter run -d <device-id> --dart-define=TETRI_API_URL=http://127.0.0.1:5080/api
 
 The API must still be running through Docker Compose. Local HTTP is permitted only by the Android debug manifest. Tokens stay in secure storage; biometric unlock reads the saved session only after authentication. A warm lock covers the existing screen so an unresolved payment retains its confirmation key.
 
+Golden references use Windows and Flutter 3.47.9, matching the Flutter CI job. The checks compare exact pixels. Custom-font rasterization can differ by operating system, as described in [Flutter's golden-test documentation](https://api.flutter.dev/flutter/flutter_test/matchesGoldenFile.html); regenerate references on the same platform and visually review every change.
+
 Inter and the Phosphor icon font are bundled; flag circles are drawn locally, so rendering does not require a font or image download. [Artwork explorations and prompts](docs/design-assets.md) are recorded with the project; shaded bitmap candidates are not included in the app. The icon dependency is `phosphor_glyphs`: it preserves the chosen Phosphor outline set while supporting the latest Flutter's final `IconData` class. The older `phosphor_flutter` and `lucide_icons` packages named in the original spec do not compile with this SDK.
 
 ## Project structure
@@ -151,6 +153,6 @@ AGENTS.MD                  Product specification and phase gates
 ## Phase 5 verification status
 
 - Welcome, stepped sign-up, sign-in, biometric lock, Home, account history, Send, Convert, Activity, transaction detail and Settings are wired to the API.
-- All 208 Flutter tests pass locally, including simultaneous token refresh, refresh failure handling, payment retry keys, expired quote review, background lock state, and Home/Send review goldens in both themes. Analysis reports zero issues; the debug APK builds.
+- All 215 Flutter tests pass locally, including simultaneous token refresh, refresh failure handling, payment retry keys, expired quote review, exact calendar rate dates, background lock state, and Home/Send review goldens in both themes. Analysis reports zero issues; the debug APK builds.
 - On the Android emulator, a new user registered with the specified starter balances and sent 25.00 GEL to a second user. Activity shows the transfer, and API reads verify sender/recipient GEL balances of 975.00/1,025.00.
 - Physical-device verification and Phase 5 CI are pending. Live conversion currently returns `rates_unavailable`: the undated NBG feed supplied rates effective 4 November 2026, which the fresh local database correctly refuses to use before that UTC date. The conversion controller and real PostgreSQL API tests pass with controlled fixtures. Phase 6 has not started.

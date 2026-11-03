@@ -61,5 +61,5 @@ abstract final class MoneyStrings {
   static String rateText(String from, String rate, String to) =>
       '1 $from = $rate $to';
   static String dateText(DateTime date) =>
-      DateFormat('d MMM yyyy').format(date);
+      DateFormat('d MMM yyyy', 'en_US').format(date);
 }
