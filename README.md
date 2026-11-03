@@ -96,6 +96,7 @@ AGENTS.MD                  Product specification and phase gates
 
 - Release build: passes with zero warnings and zero errors.
 - Local PostgreSQL tests: blocked because the Docker engine requires WSL installation. Docker Desktop is installed; Windows administrator approval is still needed for `wsl --install --no-distribution`.
-- PostgreSQL tests and Docker Compose health on the CI Docker host: verification in progress.
+- PostgreSQL tests on the CI Docker host: all 27 pass, with zero skipped tests.
+- Docker Compose health: verification in progress.
 - GitHub CI: verification in progress.
 - Later phases have not started.
